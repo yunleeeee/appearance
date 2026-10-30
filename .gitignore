@@ -1,0 +1,21 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Local build output and caches
+.build/
+.swiftpm/
+build/
+.tmp/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+*.log
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini

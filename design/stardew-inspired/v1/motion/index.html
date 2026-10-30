@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>葡萄小农场 · 动态预览</title>
+  <style>
+    :root { color-scheme: light; --page:#f4efe2; --ink:#3d3029; --muted:#76685c; --line:#d8cbbb; --button:#fffaf0; --selected:#65523e; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--page); color:var(--ink); font:15px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; }
+    main { width:min(100% - 40px,1152px); margin:32px auto; }
+    header { display:flex; justify-content:space-between; align-items:flex-end; gap:20px; margin-bottom:18px; }
+    h1 { margin:0; font-size:24px; font-weight:600; letter-spacing:.04em; }
+    .subtitle { margin:4px 0 0; color:var(--muted); font-size:13px; }
+    .backgrounds { display:flex; align-items:center; gap:6px; flex-shrink:0; }
+    .backgrounds span { margin-right:4px; color:var(--muted); font-size:13px; }
+    button,select,input { font:inherit; }
+    button,select { border:1px solid var(--line); color:var(--ink); background:var(--button); border-radius:7px; padding:8px 13px; }
+    button { cursor:pointer; }
+    button:hover { border-color:#9f8b72; }
+    button:focus-visible,select:focus-visible,input:focus-visible { outline:3px solid #bc8e4c; outline-offset:3px; }
+    button[aria-pressed="true"] { background:var(--selected); color:#fffaf0; border-color:var(--selected); }
+    button:disabled,select:disabled,input:disabled { cursor:default; opacity:.5; }
+    .backgrounds button { padding:5px 12px; }
+    .stage { background:#adcddd; overflow:hidden; border-radius:9px; }
+    canvas { display:block; width:100%; height:auto; image-rendering:pixelated; image-rendering:crisp-edges; aspect-ratio:3/1; }
+    .controls { display:flex; align-items:center; flex-wrap:wrap; gap:9px; margin-top:17px; }
+    .controls .spacer { flex:1 1 20px; }
+    .field { display:flex; align-items:center; gap:8px; }
+    .field label { color:var(--muted); font-size:13px; }
+    .timeline { margin-top:24px; }
+    .timeline-top { display:flex; justify-content:space-between; align-items:baseline; gap:14px; margin-bottom:8px; }
+    .timeline-top label { font-weight:500; }
+    #phase-name { color:var(--muted); font-size:13px; font-variant-numeric:tabular-nums; }
+    #timeline { display:block; width:100%; margin:0; accent-color:#9b6c39; min-height:24px; }
+    .stops { display:flex; justify-content:space-between; color:var(--muted); font-size:12px; padding:0 3px; margin-top:4px; }
+    .note { margin:19px 0 0; color:var(--muted); font-size:12px; }
+    #status { margin:12px 0 0; color:#a04326; font-size:13px; }
+    #status[hidden] { display:none; }
+    @media(max-width:600px) {
+      main { width:calc(100% - 24px); margin:20px auto; }
+      header { align-items:flex-start; flex-direction:column; gap:13px; }
+      h1 { font-size:21px; }
+      .controls { gap:8px; }
+      .controls .spacer { display:none; }
+      .field { width:100%; margin-top:5px; }
+      .field select { flex:1; }
+      button { padding:9px 12px; min-height:42px; }
+      .backgrounds button { min-height:36px; }
+      .stops { font-size:11px; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>葡萄小农场</h1>
+      <p class="subtitle">藤叶轻摆 · 果串回弹 · 花开花落</p>
+    </div>
+    <div class="backgrounds" role="group" aria-label="预览背景">
+      <span>背景</span>
+      <button type="button" id="day" aria-pressed="true">浅色</button>
+      <button type="button" id="night" aria-pressed="false">深色</button>
+    </div>
+  </header>
+  <div class="stage" id="stage-surface">
+    <canvas id="garden" width="384" height="128" role="img" aria-label="像素葡萄藤动态预览，展示叶片摆动、果串受力回弹和花朵六阶段变化。">像素葡萄藤动画，需要支持 Canvas 的浏览器。</canvas>
+  </div>
+  <div class="controls" role="group" aria-label="动画控制">
+    <button type="button" id="play" data-ready disabled aria-pressed="true">暂停</button>
+    <button type="button" id="feed" data-ready disabled>模拟投喂</button>
+    <button type="button" id="gust" data-ready disabled>一阵风</button>
+    <button type="button" id="replay" data-ready disabled>重播花期</button>
+    <span class="spacer"></span>
+    <div class="field">
+      <label for="flower-stage">花朵状态</label>
+      <select id="flower-stage" data-ready disabled>
+        <option value="auto">自动花期</option>
+        <option value="0">含苞</option>
+        <option value="1">待放</option>
+        <option value="2">初绽</option>
+        <option value="3">盛放</option>
+        <option value="4">萎垂</option>
+        <option value="5">凋零</option>
+      </select>
+    </div>
+  </div>
+  <div class="timeline">
+    <div class="timeline-top">
+      <label for="timeline">花期进度</label>
+      <span id="phase-name" aria-live="polite">正在准备花园</span>
+    </div>
+    <input id="timeline" data-ready disabled type="range" min="0" max="16" step="0.02" value="0" aria-valuetext="含苞">
+    <div class="stops" aria-hidden="true"><span>含苞</span><span>待放</span><span>初绽</span><span>盛放</span><span>萎垂</span><span>凋零</span></div>
+  </div>
+  <p class="note" id="motion-note">演示花期，非真实 DDL。凋零后残花留在枝上，重播后才重新含苞。</p>
+  <p id="status" role="alert" hidden></p>
+</main>
+<script src="scene.js"></script>
+<script>
+(() => {
+  'use strict';
+  const canvas = document.getElementById('garden');
+  const context = canvas.getContext('2d', {alpha:false});
+  const phaseName = document.getElementById('phase-name');
+  const timeline = document.getElementById('timeline');
+  const stagePicker = document.getElementById('flower-stage');
+  const playButton = document.getElementById('play');
+  const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const labels = ['含苞','待放','初绽','盛放','萎垂','凋零'];
+  const stageTimes = [0.5,2.5,4.5,7.5,11.4,13.5];
+  const palette = {day:'#adcddd', night:'#26323b'};
+  let manifest = null;
+  let images = {};
+  let ready = false;
+  let background = 'day';
+  let running = !reducedMotionQuery.matches;
+  let elapsed = 0;
+  let clockAt = performance.now();
+  let clockBase = 0;
+  let manualStage = null;
+  let manualSince = 0;
+  let feedAt;
+  let gustAt;
+  let lastPaint = -Infinity;
+  let latestFrame = null;
+  let latestOptions = {};
+  let missingSprites = [];
+
+  function currentTime(now=performance.now()) {
+    return running ? clockBase + (now-clockAt)/1000 : elapsed;
+  }
+  function setTime(value) {
+    elapsed = Math.max(0, Number.isFinite(value) ? value : 0);
+    clockBase = elapsed;
+    clockAt = performance.now();
+  }
+  function updatePlayback() {
+    playButton.textContent = running ? '暂停' : '播放';
+    playButton.setAttribute('aria-pressed', String(running));
+  }
+  function setRunning(value) {
+    const time = currentTime();
+    running = value;
+    setTime(time);
+    updatePlayback();
+  }
+  function frameOptions(overrides={}) {
+    const options = {wind:0.62, reducedMotion:reducedMotionQuery.matches};
+    if (manualStage !== null) {
+      options.flowerStage = manualStage;
+      options.flowerStageSince = manualSince;
+    }
+    if (feedAt !== undefined) options.feedAt = feedAt;
+    if (gustAt !== undefined) options.gustAt = gustAt;
+    return Object.assign(options, overrides);
+  }
+  function drawFrame(time, overrides={}) {
+    if (!ready) return null;
+    const options = frameOptions(overrides);
+    const frame = window.FarmMotion.scene(time, options);
+    context.setTransform(1,0,0,1,0,0);
+    context.globalAlpha = 1;
+    context.imageSmoothingEnabled = false;
+    context.fillStyle = palette[background];
+    context.fillRect(0,0,canvas.width,canvas.height);
+    context.translate(0,-48);
+    const missing = new Set();
+    for (const command of frame.commands) {
+      context.save();
+      context.globalAlpha = command.opacity === undefined ? 1 : Math.max(0,Math.min(1,command.opacity));
+      if (command.type === 'sprite') {
+        const sprite = manifest.sprites[command.id];
+        if (!sprite || !images[sprite.image]) { missing.add(command.id); context.restore(); continue; }
+        context.translate(Math.round(command.x),Math.round(command.y));
+        context.rotate((command.rotation || 0)*Math.PI/180);
+        context.scale(command.scaleX === undefined ? 1 : command.scaleX,command.scaleY === undefined ? 1 : command.scaleY);
+        context.drawImage(images[sprite.image],sprite.x,sprite.y,sprite.w,sprite.h,
+          -sprite.anchorX,-sprite.anchorY,sprite.nativeW,sprite.nativeH);
+      } else if (command.type === 'rect') {
+        context.fillStyle = command.color;
+        context.fillRect(Math.round(command.x),Math.round(command.y),Math.max(1,Math.round(command.w)),Math.max(1,Math.round(command.h)));
+      } else if (command.type === 'line' && command.points && command.points.length) {
+        context.strokeStyle = command.color;
+        context.lineWidth = command.width || 1;
+        context.lineJoin = 'miter';
+        context.lineCap = 'butt';
+        const offset = Math.round(context.lineWidth)%2 ? 0.5 : 0;
+        context.beginPath();
+        command.points.forEach((point,index) => {
+          const x = Math.round(point[0])+offset, y = Math.round(point[1])+offset;
+          if (index) context.lineTo(x,y); else context.moveTo(x,y);
+        });
+        context.stroke();
+      }
+      context.restore();
+    }
+    latestFrame = frame;
+    latestOptions = options;
+    elapsed = time;
+    missingSprites = Array.from(missing);
+    const stage = Number.isFinite(frame.stage) ? frame.stage : 0;
+    const label = frame.stageLabel || labels[stage] || '含苞';
+    const isManual = options.flowerStage !== undefined;
+    const shownTime = isManual ? stageTimes[stage] : Math.min(time,16);
+    timeline.value = shownTime;
+    timeline.setAttribute('aria-valuetext',label);
+    const phaseText = label + (isManual ? ' · 固定状态' : '');
+    // The live region changes only at stage boundaries, not on every frame.
+    if (phaseName.textContent !== phaseText) {
+      phaseName.textContent = phaseText;
+    }
+    return frame;
+  }
+  function redraw() { return drawFrame(currentTime()); }
+  function animationLoop(now) {
+    if (ready && running && now-lastPaint >= 1000/12) {
+      drawFrame(currentTime(now));
+      lastPaint = now;
+    }
+    requestAnimationFrame(animationLoop);
+  }
+  function changeBackground(value) {
+    background = value;
+    document.getElementById('day').setAttribute('aria-pressed',String(value==='day'));
+    document.getElementById('night').setAttribute('aria-pressed',String(value==='night'));
+    document.getElementById('stage-surface').style.background = palette[value];
+    redraw();
+  }
+  document.getElementById('day').addEventListener('click',() => changeBackground('day'));
+  document.getElementById('night').addEventListener('click',() => changeBackground('night'));
+  playButton.addEventListener('click',() => {setRunning(!running); redraw();});
+  document.getElementById('feed').addEventListener('click',() => {
+    feedAt = currentTime();
+    setRunning(true);
+    redraw();
+  });
+  document.getElementById('gust').addEventListener('click',() => {
+    gustAt = currentTime();
+    setRunning(true);
+    redraw();
+  });
+  document.getElementById('replay').addEventListener('click',() => {
+    manualStage = null;
+    stagePicker.value = 'auto';
+    feedAt = undefined;
+    gustAt = undefined;
+    running = !reducedMotionQuery.matches;
+    setTime(0);
+    updatePlayback();
+    redraw();
+  });
+  timeline.addEventListener('input',() => {
+    manualStage = null;
+    stagePicker.value = 'auto';
+    setTime(Number(timeline.value));
+    redraw();
+  });
+  stagePicker.addEventListener('change',() => {
+    const time = currentTime();
+    const previous = manualStage;
+    manualStage = stagePicker.value === 'auto' ? null : Number(stagePicker.value);
+    manualSince = time;
+    if (manualStage === null && previous !== null) setTime(stageTimes[previous]);
+    else setTime(time);
+    redraw();
+  });
+  reducedMotionQuery.addEventListener('change',() => {
+    if (reducedMotionQuery.matches) setRunning(false);
+    document.getElementById('motion-note').textContent = reducedMotionQuery.matches
+      ? '已遵循减少动态效果设置。可用花期进度查看各状态；演示不代表真实 DDL。'
+      : '演示花期，非真实 DDL。凋零后残花留在枝上，重播后才重新含苞。';
+    redraw();
+  });
+
+  window.motionPreview = {
+    renderAt(time,options={}) {
+      running = false;
+      setTime(time);
+      if (options.background) changeBackground(options.background);
+      updatePlayback();
+      return drawFrame(time,options);
+    },
+    getState() {
+      return {ready,elapsed,currentTime:currentTime(),running,background,
+        stage:latestFrame ? latestFrame.stage : null,
+        stageLabel:latestFrame ? latestFrame.stageLabel : null,
+        commandCount:latestFrame ? latestFrame.commands.length : 0,
+        missingSprites:missingSprites.slice(),options:latestOptions,
+        width:canvas.width,height:canvas.height};
+    }
+  };
+
+  async function load() {
+    if (!window.FarmMotion) throw new Error('动画尚未准备完成，请稍后重新载入。');
+    const response = await fetch('assets.json',{cache:'no-store'});
+    if (!response.ok) throw new Error('植物素材尚未准备完成，请稍后重新载入。');
+    manifest = await response.json();
+    await Promise.all(Object.entries(manifest.images).map(async ([key,url]) => {
+      const image = new Image();
+      image.src = url;
+      await image.decode();
+      images[key] = image;
+    }));
+    ready = true;
+    for (const control of document.querySelectorAll('[data-ready]')) control.disabled = false;
+    setTime(0);
+    updatePlayback();
+    if (reducedMotionQuery.matches) document.getElementById('motion-note').textContent = '已遵循减少动态效果设置。可用花期进度查看各状态；演示不代表真实 DDL。';
+    drawFrame(0);
+    requestAnimationFrame(animationLoop);
+  }
+  context.fillStyle = palette.day;
+  context.fillRect(0,0,canvas.width,canvas.height);
+  load().catch(error => {
+    const status = document.getElementById('status');
+    status.hidden = false;
+    status.textContent = error.message || '素材载入失败，请稍后重新载入。';
+    phaseName.textContent = '尚未载入';
+  });
+})();
+</script>
+</body>
+</html>

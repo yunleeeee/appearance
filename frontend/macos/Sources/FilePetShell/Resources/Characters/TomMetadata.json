@@ -1,0 +1,28 @@
+{
+  "sourcePage": "https://giphy.com/gifs/TomAndJerry-tom-and-jerry-IiPcrX346rLtig90FJ",
+  "sourceAccount": "TomAndJerry",
+  "accountVerified": true,
+  "title": "Licking Warner Brothers GIF by Tom & Jerry",
+  "sourceGIF": "IiPcrX346rLtig90FJ.gif",
+  "decodedGIFWidth": 480,
+  "decodedGIFHeight": 360,
+  "decodedFrameCount": 94,
+  "selectedFrame": 25,
+  "selectedTimeSeconds": 1.0,
+  "cropTopLeft": [
+    25,
+    30
+  ],
+  "cropSize": [
+    195,
+    170
+  ],
+  "outputSize": [
+    195,
+    170
+  ],
+  "horizontalMirror": true,
+  "alphaMethod": "Apple Vision native foreground segmentation; restore closed silhouette interiors from original RGB; no redraw",
+  "displaySuggestion": "aspect-fit 124x112 pt; neck bottom behind vine; static frame, no fabricated facial animation",
+  "quality": "Light/dark proof visually checked: yellow eyes, black pupils/nose, white muzzle and ears intact. Fine whiskers and 1-pixel film-colored contour remain imperfect."
+}

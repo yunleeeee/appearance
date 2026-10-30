@@ -1,0 +1,16 @@
+{
+  "audioTracks" : 0,
+  "duration" : 16,
+  "fps" : 24,
+  "height" : 576,
+  "renderer" : "JavaScriptCore motion commands + CoreGraphics nearest-neighbor pixels",
+  "sourceLogicalHeight" : 192,
+  "sourceLogicalWidth" : 384,
+  "visibleLogicalRect" : {
+    "height" : 192,
+    "width" : 384,
+    "x" : 0,
+    "y" : 0
+  },
+  "width" : 1152
+}

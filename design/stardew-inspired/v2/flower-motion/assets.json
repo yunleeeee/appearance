@@ -1,0 +1,135 @@
+{
+  "version": 2,
+  "images": {
+    "flowers": "flower-atlas.png"
+  },
+  "sprites": {
+    "flower0Head": {
+      "image": "flowers",
+      "x": 107,
+      "y": 220,
+      "w": 173,
+      "h": 249,
+      "nativeW": 15.57,
+      "nativeH": 22.41,
+      "anchorX": 7.74,
+      "anchorY": 10.17
+    },
+    "flower1Head": {
+      "image": "flowers",
+      "x": 370,
+      "y": 191,
+      "w": 255,
+      "h": 293,
+      "nativeW": 22.95,
+      "nativeH": 26.37,
+      "anchorX": 10.8,
+      "anchorY": 12.51
+    },
+    "flower2Head": {
+      "image": "flowers",
+      "x": 677,
+      "y": 154,
+      "w": 359,
+      "h": 357,
+      "nativeW": 32.31,
+      "nativeH": 32.13,
+      "anchorX": 18.36,
+      "anchorY": 15.66
+    },
+    "flower3Head": {
+      "image": "flowers",
+      "x": 1060,
+      "y": 70,
+      "w": 457,
+      "h": 455,
+      "nativeW": 41.13,
+      "nativeH": 40.95,
+      "anchorX": 21.78,
+      "anchorY": 19.44
+    },
+    "flower4Head": {
+      "image": "flowers",
+      "x": 35,
+      "y": 571,
+      "w": 374,
+      "h": 346,
+      "nativeW": 33.66,
+      "nativeH": 31.14,
+      "anchorX": 15.84,
+      "anchorY": 18.09
+    },
+    "flower5Head": {
+      "image": "flowers",
+      "x": 435,
+      "y": 586,
+      "w": 389,
+      "h": 352,
+      "nativeW": 35.01,
+      "nativeH": 31.68,
+      "anchorX": 13.95,
+      "anchorY": 17.37
+    },
+    "flower3Core": {
+      "image": "flowers",
+      "x": 1243,
+      "y": 229,
+      "w": 128,
+      "h": 128,
+      "nativeW": 11.52,
+      "nativeH": 11.52,
+      "anchorX": 5.31,
+      "anchorY": 5.13
+    },
+    "leaf": {
+      "image": "flowers",
+      "x": 895,
+      "y": 654,
+      "w": 220,
+      "h": 248,
+      "nativeW": 9.9,
+      "nativeH": 11.16,
+      "anchorX": 0.9,
+      "anchorY": 10.305
+    },
+    "petal": {
+      "image": "flowers",
+      "x": 1218,
+      "y": 675,
+      "w": 249,
+      "h": 197,
+      "nativeW": 7.47,
+      "nativeH": 5.91,
+      "anchorX": 3.66,
+      "anchorY": 3.33
+    }
+  },
+  "geometry": {
+    "headHeartToCalyx": [
+      [
+        2.52,
+        10.35
+      ],
+      [
+        0.9,
+        10.8
+      ],
+      [
+        -0.9,
+        13.77
+      ],
+      [
+        -3.6,
+        18.99
+      ],
+      [
+        3.15,
+        -13.14
+      ],
+      [
+        3.51,
+        -12.24
+      ]
+    ]
+  }
+}

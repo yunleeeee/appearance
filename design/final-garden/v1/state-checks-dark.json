@@ -1,0 +1,57 @@
+[
+  {
+    "commandCount" : 44,
+    "gardenOpacity" : 1,
+    "time" : 0
+  },
+  {
+    "commandCount" : 44,
+    "gardenOpacity" : 1,
+    "time" : 2
+  },
+  {
+    "commandCount" : 44,
+    "gardenOpacity" : 1,
+    "time" : 3.8999999999999999
+  },
+  {
+    "commandCount" : 44,
+    "gardenOpacity" : 1,
+    "time" : 4
+  },
+  {
+    "commandCount" : 44,
+    "gardenOpacity" : 0.84375,
+    "time" : 4.5
+  },
+  {
+    "commandCount" : 44,
+    "gardenOpacity" : 0.5,
+    "time" : 5
+  },
+  {
+    "commandCount" : 44,
+    "gardenOpacity" : 0.15625,
+    "time" : 5.5
+  },
+  {
+    "commandCount" : 44,
+    "gardenOpacity" : 0,
+    "time" : 6
+  },
+  {
+    "commandCount" : 44,
+    "gardenOpacity" : 0,
+    "time" : 8
+  },
+  {
+    "commandCount" : 44,
+    "gardenOpacity" : 0,
+    "time" : 10
+  },
+  {
+    "commandCount" : 44,
+    "gardenOpacity" : 0,
+    "time" : 11.800000000000001
+  }
+]

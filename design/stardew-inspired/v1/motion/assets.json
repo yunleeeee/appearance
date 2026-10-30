@@ -1,0 +1,163 @@
+{
+  "version": 1,
+  "images": {
+    "plants": "plant-sprites.png",
+    "flowers": "flower-states.png"
+  },
+  "sprites": {
+    "trellis": {
+      "image": "plants",
+      "x": 22,
+      "y": 6,
+      "w": 1494,
+      "h": 331,
+      "nativeW": 350,
+      "nativeH": 77.544,
+      "anchorX": 350,
+      "anchorY": 77.544
+    },
+    "grapePurple": {
+      "image": "plants",
+      "x": 138,
+      "y": 346,
+      "w": 255,
+      "h": 351,
+      "nativeW": 25.5,
+      "nativeH": 35.1,
+      "anchorX": 19.1,
+      "anchorY": 1.7
+    },
+    "grapeGreen": {
+      "image": "plants",
+      "x": 629,
+      "y": 346,
+      "w": 235,
+      "h": 351,
+      "nativeW": 23.5,
+      "nativeH": 35.1,
+      "anchorX": 18,
+      "anchorY": 1.7
+    },
+    "grapeGold": {
+      "image": "plants",
+      "x": 1131,
+      "y": 347,
+      "w": 243,
+      "h": 350,
+      "nativeW": 24.3,
+      "nativeH": 35,
+      "anchorX": 18.9,
+      "anchorY": 1.7
+    },
+    "leafA": {
+      "image": "plants",
+      "x": 98,
+      "y": 723,
+      "w": 271,
+      "h": 272,
+      "nativeW": 23.035,
+      "nativeH": 23.12,
+      "anchorX": 12.835,
+      "anchorY": 1.36
+    },
+    "leafB": {
+      "image": "plants",
+      "x": 576,
+      "y": 723,
+      "w": 258,
+      "h": 284,
+      "nativeW": 21.93,
+      "nativeH": 24.14,
+      "anchorX": 18.19,
+      "anchorY": 1.36
+    },
+    "leafC": {
+      "image": "plants",
+      "x": 1002,
+      "y": 779,
+      "w": 188,
+      "h": 216,
+      "nativeW": 15.98,
+      "nativeH": 18.36,
+      "anchorX": 11.815,
+      "anchorY": 1.445
+    },
+    "petal": {
+      "image": "plants",
+      "x": 1351,
+      "y": 829,
+      "w": 78,
+      "h": 85,
+      "nativeW": 5.07,
+      "nativeH": 5.525,
+      "anchorX": 2.535,
+      "anchorY": 2.86
+    },
+    "flower0": {
+      "image": "flowers",
+      "x": 202,
+      "y": 137,
+      "w": 200,
+      "h": 318,
+      "nativeW": 14,
+      "nativeH": 22.26,
+      "anchorX": 6.23,
+      "anchorY": 21.7
+    },
+    "flower1": {
+      "image": "flowers",
+      "x": 665,
+      "y": 137,
+      "w": 221,
+      "h": 318,
+      "nativeW": 15.47,
+      "nativeH": 22.26,
+      "anchorX": 7.14,
+      "anchorY": 21.7
+    },
+    "flower2": {
+      "image": "flowers",
+      "x": 1107,
+      "y": 119,
+      "w": 305,
+      "h": 336,
+      "nativeW": 21.35,
+      "nativeH": 23.52,
+      "anchorX": 12.53,
+      "anchorY": 22.96
+    },
+    "flower3": {
+      "image": "flowers",
+      "x": 101,
+      "y": 555,
+      "w": 361,
+      "h": 361,
+      "nativeW": 25.27,
+      "nativeH": 25.27,
+      "anchorX": 13.09,
+      "anchorY": 24.5
+    },
+    "flower4": {
+      "image": "flowers",
+      "x": 566,
+      "y": 594,
+      "w": 410,
+      "h": 322,
+      "nativeW": 28.7,
+      "nativeH": 22.54,
+      "anchorX": 19.95,
+      "anchorY": 21.77
+    },
+    "flower5": {
+      "image": "flowers",
+      "x": 1072,
+      "y": 614,
+      "w": 365,
+      "h": 302,
+      "nativeW": 25.55,
+      "nativeH": 21.14,
+      "anchorX": 8.05,
+      "anchorY": 20.37
+    }
+  }
+}

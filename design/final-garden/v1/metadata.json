@@ -1,0 +1,18 @@
+{
+  "audioTracks" : 0,
+  "duration" : 12,
+  "fps" : 24,
+  "height" : 432,
+  "renderer" : "Frozen flower engine + combined garden wrapper, CoreGraphics nearest-neighbor pixels",
+  "sourceEndTime" : 12,
+  "sourceLogicalHeight" : 192,
+  "sourceLogicalWidth" : 384,
+  "sourceStartTime" : 0,
+  "visibleLogicalRect" : {
+    "height" : 144,
+    "width" : 384,
+    "x" : 0,
+    "y" : 48
+  },
+  "width" : 1152
+}

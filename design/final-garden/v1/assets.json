@@ -1,0 +1,225 @@
+{
+  "version": "final-garden-v1",
+  "flower_release": "flower-v2.0-2026-10-30",
+  "images": {
+    "flowers": "flower-atlas.png",
+    "plants": "plant-sprites.png"
+  },
+  "sprites": {
+    "flower0Head": {
+      "image": "flowers",
+      "x": 107,
+      "y": 220,
+      "w": 173,
+      "h": 249,
+      "nativeW": 15.57,
+      "nativeH": 22.41,
+      "anchorX": 7.74,
+      "anchorY": 10.17
+    },
+    "flower1Head": {
+      "image": "flowers",
+      "x": 370,
+      "y": 191,
+      "w": 255,
+      "h": 293,
+      "nativeW": 22.95,
+      "nativeH": 26.37,
+      "anchorX": 10.8,
+      "anchorY": 12.51
+    },
+    "flower2Head": {
+      "image": "flowers",
+      "x": 677,
+      "y": 154,
+      "w": 359,
+      "h": 357,
+      "nativeW": 32.31,
+      "nativeH": 32.13,
+      "anchorX": 18.36,
+      "anchorY": 15.66
+    },
+    "flower3Head": {
+      "image": "flowers",
+      "x": 1060,
+      "y": 70,
+      "w": 457,
+      "h": 455,
+      "nativeW": 41.13,
+      "nativeH": 40.95,
+      "anchorX": 21.78,
+      "anchorY": 19.44
+    },
+    "flower4Head": {
+      "image": "flowers",
+      "x": 35,
+      "y": 571,
+      "w": 374,
+      "h": 346,
+      "nativeW": 33.66,
+      "nativeH": 31.14,
+      "anchorX": 15.84,
+      "anchorY": 18.09
+    },
+    "flower5Head": {
+      "image": "flowers",
+      "x": 435,
+      "y": 586,
+      "w": 389,
+      "h": 352,
+      "nativeW": 35.01,
+      "nativeH": 31.68,
+      "anchorX": 13.95,
+      "anchorY": 17.37
+    },
+    "flower3Core": {
+      "image": "flowers",
+      "x": 1243,
+      "y": 229,
+      "w": 128,
+      "h": 128,
+      "nativeW": 11.52,
+      "nativeH": 11.52,
+      "anchorX": 5.31,
+      "anchorY": 5.13
+    },
+    "leaf": {
+      "image": "flowers",
+      "x": 895,
+      "y": 654,
+      "w": 220,
+      "h": 248,
+      "nativeW": 9.9,
+      "nativeH": 11.16,
+      "anchorX": 0.9,
+      "anchorY": 10.305
+    },
+    "petal": {
+      "image": "flowers",
+      "x": 1218,
+      "y": 675,
+      "w": 249,
+      "h": 197,
+      "nativeW": 7.47,
+      "nativeH": 5.91,
+      "anchorX": 3.66,
+      "anchorY": 3.33
+    },
+    "gardenTrellis": {
+      "image": "plants",
+      "x": 22,
+      "y": 6,
+      "w": 1494,
+      "h": 331,
+      "nativeW": 350,
+      "nativeH": 77.544,
+      "anchorX": 350,
+      "anchorY": 77.544
+    },
+    "gardenGrapePurple": {
+      "image": "plants",
+      "x": 138,
+      "y": 346,
+      "w": 255,
+      "h": 351,
+      "nativeW": 25.5,
+      "nativeH": 35.1,
+      "anchorX": 19.1,
+      "anchorY": 1.7
+    },
+    "gardenGrapeGreen": {
+      "image": "plants",
+      "x": 629,
+      "y": 346,
+      "w": 235,
+      "h": 351,
+      "nativeW": 23.5,
+      "nativeH": 35.1,
+      "anchorX": 18,
+      "anchorY": 1.7
+    },
+    "gardenGrapeGold": {
+      "image": "plants",
+      "x": 1131,
+      "y": 347,
+      "w": 243,
+      "h": 350,
+      "nativeW": 24.3,
+      "nativeH": 35,
+      "anchorX": 18.9,
+      "anchorY": 1.7
+    },
+    "gardenLeafA": {
+      "image": "plants",
+      "x": 98,
+      "y": 723,
+      "w": 271,
+      "h": 272,
+      "nativeW": 23.035,
+      "nativeH": 23.12,
+      "anchorX": 12.835,
+      "anchorY": 1.36
+    },
+    "gardenLeafB": {
+      "image": "plants",
+      "x": 576,
+      "y": 723,
+      "w": 258,
+      "h": 284,
+      "nativeW": 21.93,
+      "nativeH": 24.14,
+      "anchorX": 18.19,
+      "anchorY": 1.36
+    },
+    "gardenLeafC": {
+      "image": "plants",
+      "x": 1002,
+      "y": 779,
+      "w": 188,
+      "h": 216,
+      "nativeW": 15.98,
+      "nativeH": 18.36,
+      "anchorX": 11.815,
+      "anchorY": 1.445
+    },
+    "gardenPetal": {
+      "image": "plants",
+      "x": 1351,
+      "y": 829,
+      "w": 78,
+      "h": 85,
+      "nativeW": 5.07,
+      "nativeH": 5.525,
+      "anchorX": 2.535,
+      "anchorY": 2.86
+    }
+  },
+  "geometry": {
+    "headHeartToCalyx": [
+      [
+        2.52,
+        10.35
+      ],
+      [
+        0.9,
+        10.8
+      ],
+      [
+        -0.9,
+        13.77
+      ],
+      [
+        -3.6,
+        18.99
+      ],
+      [
+        3.15,
+        -13.14
+      ],
+      [
+        3.51,
+        -12.24
+      ]
+    ]
+  }
+}
