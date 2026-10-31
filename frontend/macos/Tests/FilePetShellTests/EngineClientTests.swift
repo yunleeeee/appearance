@@ -76,10 +76,10 @@ final class EngineClientTests: XCTestCase {
             XCTAssertEqual(result.deadlines, [
                 EngineDeadline(id: "stable-first", title: "提交实验报告", project: "软件工程",
                                dueDate: "2026-11-03", dueTime: "23:59", yearInferred: false,
-                               evidence: "请于2026年11月3日23:59前提交实验报告", signal: "date_before_action"),
+                               evidence: "请于2026年11月3日23:59前提交实验报告", signal: "date_before_action", status: "needs_confirmation"),
                 EngineDeadline(id: "stable-second", title: "上传演示材料", project: "软件工程",
                                dueDate: "2026-11-05", dueTime: nil, yearInferred: true,
-                               evidence: "演示材料截止：11月5日", signal: "explicit_deadline"),
+                               evidence: "演示材料截止：11月5日", signal: "explicit_deadline", status: "needs_confirmation"),
             ])
         }
     }
