@@ -82,6 +82,7 @@ enum CompactGrapeLayout {
         let center: CGPoint
         let size: CGSize
         let depth: Double
+        var row: Int = 0
     }
 
     static func berries(count: Int) -> [Berry] {
@@ -126,10 +127,18 @@ enum CompactGrapeLayout {
             if amount <= 0 { break }
             for column in 0..<amount {
                 let stagger: CGFloat = row.isMultiple(of: 2) ? -0.10 : 0.10
-                let x = 32 + (CGFloat(column) - CGFloat(amount - 1) / 2 + stagger) * horizontalStep
-                let y = 14 + (CGFloat(row) + 0.5) * verticalStep
-                output.append(Berry(center: CGPoint(x: x, y: y), size: size,
-                                    depth: Double((column + row) % 3) * 0.05))
+                // Tiny deterministic variations in placement and fruit size
+                // remove the abacus-like rows without randomizing each redraw.
+                let dx = CGFloat(((row + 1) * 41 + (column + 3) * 73) % 17 - 8) * 0.16
+                let dy = CGFloat(((column + 1) * 11 + row * 7) % 9 - 4) * 0.18
+                let variation = CGFloat(0.93 + Double((row * 7 + column * 3) % 5) * 0.025)
+                let berrySize = CGSize(width: size.width * variation, height: size.height * variation)
+                let initialX = 32 + (CGFloat(column) - CGFloat(amount - 1) / 2 + stagger) * horizontalStep + dx
+                let initialY = 14 + (CGFloat(row) + 0.5) * verticalStep + dy
+                let x = min(64 - berrySize.width / 2, max(berrySize.width / 2, initialX))
+                let y = min(88 - berrySize.height / 2, max(berrySize.height / 2, initialY))
+                output.append(Berry(center: CGPoint(x: x, y: y), size: berrySize,
+                                    depth: Double((column + row) % 3) * 0.05, row: row))
             }
         }
         return output
