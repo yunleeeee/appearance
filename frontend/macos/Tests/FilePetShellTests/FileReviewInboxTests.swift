@@ -22,6 +22,8 @@ final class FileReviewInboxTests: XCTestCase {
         XCTAssertEqual(restored.items[0].candidates.map(\.id), ["second"])
         XCTAssertEqual(FileReviewInbox(defaults: defaults).items, restored.items)
         restored.resolveCandidate(reviewID: reviewID, candidateID: "second")
+        XCTAssertEqual(restored.items.count, 1, "Unclassified file still needs category confirmation")
+        restored.resolveCategory(reviewID: reviewID)
         XCTAssertTrue(restored.items.isEmpty)
         XCTAssertTrue(FileReviewInbox(defaults: defaults).items.isEmpty)
     }
