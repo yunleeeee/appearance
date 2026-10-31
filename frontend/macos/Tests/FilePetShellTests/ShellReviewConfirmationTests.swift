@@ -24,7 +24,7 @@ final class ShellReviewConfirmationTests: XCTestCase {
         XCTAssertNil(store.confirmDeadline(reviewID: reviewID, candidateID: source.id,
                                           title: "第二次作业", project: "软件工程",
                                           dueDate: "2026-10-18", dueTime: "23:59"))
-        XCTAssertTrue(store.reviewInbox.items.isEmpty)
+        XCTAssertEqual(store.reviewInbox.items.count, 1, "Category review remains after accepting OCR")
         XCTAssertEqual(store.garden.visibleDeadlines.count, 1)
         XCTAssertEqual(store.garden.deadlines.first?.id, source.id)
         XCTAssertEqual(store.garden.deadlines.first?.title, "第二次作业")
@@ -53,12 +53,12 @@ final class ShellReviewConfirmationTests: XCTestCase {
                 XCTAssertEqual(store.reviewInbox.items[0].candidates.count, candidates.count - index - 1)
             }
         }
-        XCTAssertTrue(store.reviewInbox.items.isEmpty)
-        XCTAssertEqual(store.garden.visibleDeadlines.map(\.id), ["ocr-1", "ocr-2", "ocr-3"])
-        XCTAssertEqual(store.garden.queuedCount, 1)
-        store.garden.harvest(id: "ocr-1")
-        XCTAssertEqual(store.garden.visibleDeadlines.map(\.id), ["ocr-2", "ocr-3", "ocr-4"])
-        XCTAssertEqual(store.garden.queuedCount, 0)
+        XCTAssertEqual(store.reviewInbox.items.count, 1, "Category review remains after DDLs")
+        XCTAssertEqual(store.garden.visibleDeadlines.map(\.id), ["ocr-4"])
+        XCTAssertEqual(store.garden.queuedCount, 3)
+        store.garden.harvest(id: "ocr-4")
+        XCTAssertEqual(store.garden.visibleDeadlines.map(\.id), ["ocr-3"])
+        XCTAssertEqual(store.garden.queuedCount, 2)
     }
 
     func testPendingReviewSurvivesRestartAndInvalidInputCannotDiscardIt() async throws {
@@ -89,7 +89,7 @@ final class ShellReviewConfirmationTests: XCTestCase {
         XCTAssertEqual(store.garden.deadlines.count, 1)
         XCTAssertNil(store.garden.deadlines[0].dueTime)
         XCTAssertEqual(store.garden.deadlines[0].title, "手动补充作业")
-        XCTAssertTrue(store.reviewInbox.items.isEmpty)
+        XCTAssertEqual(store.reviewInbox.items.count, 1, "Category review remains actionable")
         XCTAssertEqual(store.vine.totalGrapes, 0)
     }
 
@@ -124,7 +124,7 @@ final class ShellReviewConfirmationTests: XCTestCase {
         let store = makeStore([result(candidates: [clear])], defaults: defaults)
         store.classifyFiles([file("clear.txt")])
         await store.waitUntilIdle()
-        XCTAssertTrue(store.reviewInbox.items.isEmpty)
+        XCTAssertEqual(store.reviewInbox.items.count, 1, "Unknown classification remains actionable")
         XCTAssertEqual(store.garden.visibleDeadlines.map(\.id), ["clear"])
         XCTAssertEqual(store.vine.totalGrapes, 0)
     }
