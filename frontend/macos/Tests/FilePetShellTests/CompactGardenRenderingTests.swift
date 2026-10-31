@@ -68,11 +68,11 @@ final class CompactGardenRenderingTests: XCTestCase {
         }
     }
 
-    func testDenseGrapeClustersFormAHandingTaperInsteadOfRectangularRows() {
+    func testDenseGrapeClustersFormAHangingTaperInsteadOfRectangularRows() {
         for count in [13, 20, 31, 64, 100] {
             let grapes = CompactGrapeLayout.berries(count: count)
             XCTAssertEqual(grapes.count, count)
-            let bands = Dictionary(grouping: grapes) { Int(($0.center.y * 100).rounded()) }
+            let bands = Dictionary(grouping: grapes, by: \.row)
             let counts = bands.keys.sorted().map { bands[$0]!.count }
             XCTAssertGreaterThan(counts.count, 3)
             XCTAssertGreaterThan(counts.first ?? 0, counts.last ?? 0,
