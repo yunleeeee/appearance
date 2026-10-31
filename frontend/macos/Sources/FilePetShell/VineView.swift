@@ -100,10 +100,15 @@ enum CompactGrapeLayout {
         let columns = max(4, Int(ceil(sqrt(Double(count) * 0.72))))
         let rows = Int(ceil(Double(count) / Double(columns)))
         let side = min(60 / CGFloat(columns), 82 / CGFloat(rows))
-        return (0..<count).map { index in
-            Berry(center: CGPoint(x: CGFloat(index % columns) * side + (64 - CGFloat(columns) * side) / 2 + side / 2,
-                                  y: CGFloat(index / columns) * side + side / 2),
-                  size: CGSize(width: side * 1.08, height: side * 1.10), depth: Double(index % 2) * 0.1)
+        let xInset: CGFloat = (64 - CGFloat(columns) * side) / 2
+        let berrySize = CGSize(width: side * 1.08, height: side * 1.10)
+        return (0..<count).map { index -> Berry in
+            let column = CGFloat(index % columns)
+            let row = CGFloat(index / columns)
+            let center = CGPoint(x: column * side + xInset + side / 2,
+                                 y: row * side + side / 2)
+            let depth = Double(index % 2) * 0.1
+            return Berry(center: center, size: berrySize, depth: depth)
         }
     }
 }
