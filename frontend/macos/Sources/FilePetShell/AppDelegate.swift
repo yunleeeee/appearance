@@ -152,7 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func setPanelVisible(_ visible: Bool) {
         petVisible = visible
-        flowerController?.setVisible(visible)
+        // The trellis may sleep or hide while deadline flowers remain present.
         store.vine.setTheftPresentationEnabled(visible)
         if visible {
             vinePanel?.orderFrontRegardless()
@@ -248,6 +248,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let detail = NSMenuItem(title: "查看最近分类结果…", action: #selector(showResults), keyEquivalent: "")
         detail.target = self
         menu.addItem(detail)
+        let undo = NSMenuItem(title: "撤销最近一次采摘", action: #selector(undoHarvest), keyEquivalent: "")
+        undo.target = self
+        menu.addItem(undo)
         menu.addItem(.separator())
 
         let toggle = NSMenuItem(
@@ -311,6 +314,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func showPendingReviews() {
         if reviewWindowController == nil { reviewWindowController = ReviewWindowController(store: store) }
         reviewWindowController?.show()
+    }
+
+    @objc private func undoHarvest() {
+        if store.garden.undoLastHarvest() != nil { store.garden.refreshTime() }
     }
 
     @objc private func toggleVine() {
