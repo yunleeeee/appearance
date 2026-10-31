@@ -22,5 +22,33 @@ jobs:
       - uses: actions/checkout@v4
       - name: Select Xcode and Swift
         run: xcodebuild -version && swift --version
-      - name: Test native macOS shell
+      - name: Test native macOS shell and render v2 proofs
+        env:
+          FILEPET_VISUAL_PROOFS: ${{ github.workspace }}/artifacts/flower-v2
         run: swift test --parallel
+      - name: Encode runtime stage and breeze captures
+        if: always()
+        run: |
+          if [ ! -d artifacts/flower-v2/six-stages ]; then
+            echo "Renderer did not produce proofs (likely build/test failure)."
+            exit 0
+          fi
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            brew install ffmpeg || true
+          fi
+          if command -v ffmpeg >/dev/null 2>&1; then
+            ffmpeg -hide_banner -loglevel error -y -framerate 24 \
+              -i artifacts/flower-v2/stage-change-frames/frame-%03d.png \
+              -c:v libx264 -pix_fmt yuv420p artifacts/flower-v2/stage-change.mp4
+            ffmpeg -hide_banner -loglevel error -y -framerate 24 \
+              -i artifacts/flower-v2/resident-breeze-frames/frame-%03d.png \
+              -c:v libx264 -pix_fmt yuv420p artifacts/flower-v2/resident-breeze.mp4
+          else
+            echo "ffmpeg unavailable: PNG frame sequences remain for reproduction."
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: filepet-flower-v2-runtime-proofs
+          path: artifacts/flower-v2
+          if-no-files-found: warn
