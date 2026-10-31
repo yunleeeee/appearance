@@ -232,7 +232,7 @@ final class ShellStore: ObservableObject {
                             $0.requiresConfirmation && !known.contains($0.id)
                         }
                         let added = garden.feed(result.deadlines.filter { !$0.requiresConfirmation })
-                        let categoryPending = label == nil && !classifiedPaths.contains(identity)
+                        let categoryPending = label == nil
                         if categoryPending || !toReview.isEmpty {
                             reviewInbox.enqueue(result: result, candidates: toReview,
                                                 needsCategoryReview: categoryPending)
