@@ -20,6 +20,12 @@ final class DeadlineFlowerController {
     private var hoveredID: String?
     private var visible = true
 
+    // Observable identity seam for native window lifecycle regressions.
+    var panelIdentities: [String: ObjectIdentifier] {
+        Dictionary(uniqueKeysWithValues: flowers.map { ($0.deadline.id, ObjectIdentifier($0.panel)) })
+    }
+    func refreshFromGarden() { synchronize() }
+
     init(garden: DeadlineGarden,
          screenFrame: @escaping () -> NSRect = { NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 1440, height: 900) },
          onFiles: @escaping ([URL]) -> Void) {
@@ -312,12 +318,16 @@ final class DeadlineFlowerView: NSView {
     // Deterministic render seams for CI visual proofs; nil during ordinary runtime.
     var previewWindAge: TimeInterval?
     var previewTransition: (from: DeadlineStage, progress: CGFloat)?
+    var reduceMotionOverride: Bool?
+    private var reduceMotion: Bool {
+        reduceMotionOverride ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
 
     var deadlineStage: DeadlineStage? {
         didSet {
             guard oldValue != deadlineStage else { return }
             if previewTransition != nil { needsDisplay = true; return }
-            if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, oldValue != nil {
+            if !reduceMotion, oldValue != nil {
                 previousStage = oldValue
                 transitionStart = Date()
                 startFrames(duration: 0.34)
@@ -332,7 +342,7 @@ final class DeadlineFlowerView: NSView {
     private var frames: Timer?
 
     func startGust(strength: CGFloat) {
-        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+        guard !reduceMotion else { return }
         gustStrength = strength
         gustStart = Date()
         startFrames(duration: 2.5)
@@ -364,7 +374,7 @@ final class DeadlineFlowerView: NSView {
     }
 
     private func force(lag: TimeInterval) -> CGFloat {
-        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return 0 }
+        guard !reduceMotion else { return 0 }
         guard previewWindAge != nil || gustStart != nil else { return 0 }
         let t = (previewWindAge ?? Date().timeIntervalSince(gustStart ?? Date())) - lag
         if t < 0 || t >= 2.35 { return 0 }
