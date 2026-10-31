@@ -41,12 +41,6 @@ final class DeadlineFlowerController {
         self.timer = timer
         timer.tolerance = 0.02
         RunLoop.main.add(timer, forMode: .common)
-        let stageTimer = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.garden.refreshTime() }
-        }
-        stageTimer.tolerance = 2
-        self.stageTimer = stageTimer
-        RunLoop.main.add(stageTimer, forMode: .common)
         let workspace = NSWorkspace.shared.notificationCenter
         clockObservers.append((workspace, workspace.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
@@ -141,6 +135,7 @@ final class DeadlineFlowerController {
         let removed = flowers.filter { !desiredIDs.contains($0.deadline.id) }
         if let id = hoveredID, !desiredIDs.contains(id) { closeDetails() }
         flowers = next
+        scheduleStageRefresh()
         reposition()
         for flower in next where existing[flower.deadline.id] == nil {
             guard visible else { continue }
@@ -167,6 +162,22 @@ final class DeadlineFlowerController {
             }
         }
         updatePointer()
+    }
+
+    private func scheduleStageRefresh() {
+        stageTimer?.invalidate()
+        guard !garden.activeDeadlines.isEmpty else { stageTimer = nil; return }
+        let now = Date()
+        let next = garden.nextStageBoundary(after: now)
+        // A bounded one-shot also catches unexpected manual clock adjustments if
+        // the OS clock notification was not delivered.
+        let delay = max(0.10, min(next?.timeIntervalSince(now) ?? 3600, 3600))
+        let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.garden.refreshTime() }
+        }
+        timer.tolerance = min(1.0, delay * 0.03)
+        stageTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     private func scheduleWind() {
