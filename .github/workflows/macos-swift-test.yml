@@ -1,0 +1,26 @@
+name: macOS Swift tests
+
+on:
+  push:
+    branches:
+      - feat/filepet-deadline-pipeline-20261031
+    paths:
+      - 'frontend/macos/**'
+      - '.github/workflows/macos-swift-test.yml'
+  pull_request:
+    paths:
+      - 'frontend/macos/**'
+      - '.github/workflows/macos-swift-test.yml'
+
+jobs:
+  swift-test:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: frontend/macos
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode and Swift
+        run: xcodebuild -version && swift --version
+      - name: Test native macOS shell
+        run: swift test --parallel
