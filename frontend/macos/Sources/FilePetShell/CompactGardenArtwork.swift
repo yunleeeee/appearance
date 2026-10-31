@@ -76,8 +76,14 @@ enum CompactGardenArtwork {
             guard alpha > 0 else { continue }
             let channels = (0..<3).map { min(1, Double(pixels[offset + $0]) / 255 / alpha) }
             let gray = channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
+            // Restore just a little of the approved foliage's green and
+            // midtone detail so the v2 flower leaves and living grape crowns
+            // belong to the same garden. Keep the wooden frame muted.
+            let foliage = channels[1] > channels[0] * 1.08 && channels[1] > channels[2] * 1.04
+            let chroma = foliage ? 0.60 : 0.48
+            let light = foliage ? 0.93 : 0.89
             for channel in 0..<3 {
-                let muted = ((gray + (channels[channel] - gray) * 0.48) * 0.89 - 0.5) * 0.83 + 0.5
+                let muted = ((gray + (channels[channel] - gray) * chroma) * light - 0.5) * 0.85 + 0.5
                 pixels[offset + channel] = UInt8(max(0, min(255, (muted * alpha * 255).rounded())))
             }
         }
