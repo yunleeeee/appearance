@@ -9,11 +9,15 @@ struct DeadlineFlowerDetailsView: View {
     var onOpenSource: (() -> Void)? = nil
 
     private var remainingText: String {
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withFullDate, .withDashSeparatorInDate,
-                             .withTime, .withColonSeparatorInTime]
-        let stamp = deadline.dueDate + "T" + (deadline.dueTime ?? "")
-        guard let date = iso.date(from: stamp) else { return "请核对截止时间" }
+        let parser = DateFormatter()
+        parser.locale = Locale(identifier: "en_US_POSIX")
+        parser.timeZone = .current
+        parser.calendar = Calendar(identifier: .gregorian)
+        parser.isLenient = false
+        parser.dateFormat = deadline.dueTime?.split(separator: ":").count == 3
+            ? "yyyy-MM-dd HH:mm:ss" : "yyyy-MM-dd HH:mm"
+        let stamp = deadline.dueDate + " " + (deadline.dueTime ?? "")
+        guard let date = parser.date(from: stamp) else { return "请核对截止时间" }
         let hours = abs(date.timeIntervalSince(now)) / 3600
         let quantity = hours >= 48 ? String(format: "%.0f 天", hours / 24)
             : String(format: "%.1f 小时", hours)
