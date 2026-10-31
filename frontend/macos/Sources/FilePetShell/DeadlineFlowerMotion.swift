@@ -91,8 +91,9 @@ enum DeadlineFlowerMotion {
         let tip: NSPoint
     }
 
-    /// Both leaves grow from sampled cubic-stem joints. The lower leaf turns
-    /// left, the upper/right leaf balances the crown. None is a floating icon.
+    /// Three original textured leaves grow from cubic-stem joints. Two turn
+    /// left at different heights, and a right leaf balances the crown.
+    /// Their anchors follow their own joints, never floating above the stem.
     static func leaves(bounds: NSRect, artwork: CompactFlowerArtwork, stage: DeadlineStage,
                        stem: CGFloat, head: CGFloat, leafLag: CGFloat = 0) -> [LeafJoint] {
         guard let g = geometry(bounds: bounds, artwork: artwork, stage: stage, stem: stem, head: head),
