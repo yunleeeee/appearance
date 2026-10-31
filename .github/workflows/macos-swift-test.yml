@@ -25,6 +25,8 @@ jobs:
       - name: Test native macOS shell and render v2 proofs
         env:
           FILEPET_VISUAL_PROOFS: ${{ github.workspace }}/artifacts/flower-v2
+          FILEPET_RENDER_COMPACT: "1"
+          FILEPET_COMPACT_PROOF_DIR: ${{ github.workspace }}/artifacts/grape-vine
         run: swift test --parallel
       - name: Encode runtime stage and breeze captures
         if: always()
@@ -53,4 +55,10 @@ jobs:
         with:
           name: filepet-flower-v2-runtime-proofs
           path: artifacts/flower-v2
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: filepet-grape-vine-pixel-proofs
+          path: artifacts/grape-vine
           if-no-files-found: warn
