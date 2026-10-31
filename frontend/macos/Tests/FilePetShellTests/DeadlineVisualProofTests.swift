@@ -51,6 +51,20 @@ final class DeadlineVisualProofTests: XCTestCase {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: snapshots.path).count, 6)
     }
 
+    func testReduceMotionDisablesContinuousBreezeButKeepsStageDifference() throws {
+        let artwork = CompactFlowerArtwork.plants[1]
+        let view = DeadlineFlowerView(artwork: artwork)
+        view.reduceMotionOverride = true
+        view.deadlineStage = .bloom
+        view.previewWindAge = 0.4
+        let first = try imageData(view)
+        view.previewWindAge = 1.4
+        let second = try imageData(view)
+        XCTAssertEqual(first, second, "Reduce Motion must suppress ongoing wind")
+        view.deadlineStage = .withered
+        XCTAssertNotEqual(first, try imageData(view), "Distinct deadlines must remain visually legible")
+    }
+
     private func imageData(_ view: DeadlineFlowerView) throws -> Data {
         let width = 256, height = 256
         let bitmap = try XCTUnwrap(NSBitmapImageRep(
