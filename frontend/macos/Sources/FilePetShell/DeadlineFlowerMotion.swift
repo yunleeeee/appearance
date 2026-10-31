@@ -81,7 +81,8 @@ enum DeadlineFlowerMotion {
 
     @discardableResult
     static func draw(bounds: NSRect, artwork: CompactFlowerArtwork, stage: DeadlineStage,
-                     stem: CGFloat, head: CGFloat, petal: CGFloat) -> Bool {
+                     stem: CGFloat, head: CGFloat,
+                     petals: (CGFloat, CGFloat, CGFloat)) -> Bool {
         guard let g = geometry(bounds: bounds, artwork: artwork, stage: stage,
                                stem: stem, head: head) else { return false }
         NSGraphicsContext.current?.imageInterpolation = .none
@@ -114,17 +115,46 @@ enum DeadlineFlowerMotion {
         leaf.stroke()
 
         let sprite = heads[stage.rawValue]
-        let context = NSGraphicsContext.current?.cgContext
-        context?.saveGState()
-        // Different follow lag makes petals respond slightly later than the head.
+        guard let context = NSGraphicsContext.current?.cgContext else { return false }
         if stage == .bloom {
-            let degrees = min(1.2, max(-1.2, (petal - head) * 2.2))
-            context?.translateBy(x: g.calyx.x, y: g.calyx.y)
-            context?.rotate(by: degrees * .pi / 180)
-            context?.translateBy(x: -g.calyx.x, y: -g.calyx.y)
+            // Three overlapping petal sectors share one anchored core but follow
+            // slightly different time delays (170/200/235 ms). No sprite stretch.
+            let heart = CGPoint(x: g.rect.minX + sprite.anchorX,
+                                y: g.rect.maxY - sprite.anchorY)
+            let groups: [(CGFloat, CGFloat, CGFloat, CGFloat)] = [
+                (210, 330, petals.0, -1), (-30, 90, petals.1, 1),
+                (90, 210, petals.2, -1)
+            ]
+            for group in groups {
+                let radians = max(-1.2, min(1.2,
+                    (group.2 - head) * 2.6 * group.3)) * .pi / 180
+                context.saveGState()
+                context.translateBy(x: heart.x, y: heart.y)
+                context.rotate(by: radians)
+                context.translateBy(x: -heart.x, y: -heart.y)
+                let path = CGMutablePath()
+                path.move(to: heart)
+                for step in 0...28 {
+                    let degrees = group.0 - 10 + (group.1 - group.0 + 20) * CGFloat(step) / 28
+                    let theta = degrees * .pi / 180
+                    path.addLine(to: CGPoint(x: heart.x + cos(theta) * 36,
+                                             y: heart.y + sin(theta) * 36))
+                }
+                path.closeSubpath()
+                context.addPath(path)
+                context.clip()
+                sprite.image.draw(in: g.rect, from: .zero, operation: .sourceOver, fraction: 1)
+                context.restoreGState()
+            }
+            // Retain the approved atlas core, concealing joints between petals.
+            context.saveGState()
+            context.clip(to: CGRect(x: heart.x - 5.5, y: heart.y - 5.5,
+                                    width: 11, height: 11))
+            sprite.image.draw(in: g.rect, from: .zero, operation: .sourceOver, fraction: 1)
+            context.restoreGState()
+        } else {
+            sprite.image.draw(in: g.rect, from: .zero, operation: .sourceOver, fraction: 1)
         }
-        sprite.image.draw(in: g.rect, from: .zero, operation: .sourceOver, fraction: 1)
-        context?.restoreGState()
         return true
     }
 
