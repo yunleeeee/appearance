@@ -309,9 +309,14 @@ final class DeadlineFlowerView: NSView {
     let artwork: CompactFlowerArtwork
     var onHarvest: (() -> Void)?
     var onFiles: (([URL]) -> Void)?
+    // Deterministic render seams for CI visual proofs; nil during ordinary runtime.
+    var previewWindAge: TimeInterval?
+    var previewTransition: (from: DeadlineStage, progress: CGFloat)?
+
     var deadlineStage: DeadlineStage? {
         didSet {
             guard oldValue != deadlineStage else { return }
+            if previewTransition != nil { needsDisplay = true; return }
             if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, oldValue != nil {
                 previousStage = oldValue
                 transitionStart = Date()
@@ -359,9 +364,9 @@ final class DeadlineFlowerView: NSView {
     }
 
     private func force(lag: TimeInterval) -> CGFloat {
-        guard let started = gustStart,
-              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return 0 }
-        let t = Date().timeIntervalSince(started) - lag
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return 0 }
+        guard previewWindAge != nil || gustStart != nil else { return 0 }
+        let t = (previewWindAge ?? Date().timeIntervalSince(gustStart ?? Date())) - lag
         if t < 0 || t >= 2.35 { return 0 }
         let shape: Double
         if t < 0.23 {
@@ -374,7 +379,7 @@ final class DeadlineFlowerView: NSView {
             let v = t - 1.45
             shape = -0.22 * sin(v * 12.5) * exp(-v * 6)
         }
-        return gustStrength * CGFloat(shape)
+        return (previewWindAge == nil ? gustStrength : 0.75) * CGFloat(shape)
     }
 
     private var press: NSPoint?
@@ -393,8 +398,10 @@ final class DeadlineFlowerView: NSView {
         if let stage = deadlineStage, DeadlineFlowerMotion.heads.count == 6 {
             let stem = force(lag: 0), head = force(lag: 0.115)
             let petals = (force(lag: 0.17), force(lag: 0.20), force(lag: 0.235))
-            if let previousStage, let start = transitionStart {
-                let elapsed = Date().timeIntervalSince(start)
+            if let previousStage = previewTransition?.from ?? previousStage,
+               previewTransition != nil || transitionStart != nil {
+                let elapsed = previewTransition.map { TimeInterval($0.progress) * 0.34 }
+                    ?? Date().timeIntervalSince(transitionStart ?? Date())
                 // Calyx-anchored upward reveal, no blurry full-flower crossfade.
                 _ = DeadlineFlowerMotion.draw(bounds: bounds, artwork: artwork, stage: previousStage,
                     stem: stem, head: head, petals: petals)
