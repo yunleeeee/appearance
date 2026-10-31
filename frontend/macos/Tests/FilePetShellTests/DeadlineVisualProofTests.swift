@@ -66,7 +66,7 @@ final class DeadlineVisualProofTests: XCTestCase {
     }
 
     private func imageData(_ view: DeadlineFlowerView) throws -> Data {
-        let width = 256, height = 256
+        let width = 384, height = 384
         let bitmap = try XCTUnwrap(NSBitmapImageRep(
             bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
