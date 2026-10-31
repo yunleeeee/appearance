@@ -68,6 +68,25 @@ final class CompactGardenRenderingTests: XCTestCase {
         }
     }
 
+    func testDenseGrapeClustersFormAHandingTaperInsteadOfRectangularRows() {
+        for count in [13, 20, 31, 64, 100] {
+            let grapes = CompactGrapeLayout.berries(count: count)
+            XCTAssertEqual(grapes.count, count)
+            let bands = Dictionary(grouping: grapes) { Int(($0.center.y * 100).rounded()) }
+            let counts = bands.keys.sorted().map { bands[$0]!.count }
+            XCTAssertGreaterThan(counts.count, 3)
+            XCTAssertGreaterThan(counts.first ?? 0, counts.last ?? 0,
+                                 "The upper shoulder should be wider than the tail")
+            XCTAssertTrue(grapes.allSatisfy {
+                $0.center.x - $0.size.width / 2 >= 0 &&
+                $0.center.x + $0.size.width / 2 <= 64 &&
+                $0.center.y - $0.size.height / 2 >= 0 &&
+                $0.center.y + $0.size.height / 2 <= 88
+            })
+        }
+        XCTAssertTrue(CompactGrapeLayout.berries(count: 0).isEmpty)
+    }
+
     func testRuntimeAnchorsMatchTheConfirmedSourceCropAndKeepExtraCategoriesOnscreen() {
         XCTAssertEqual(CompactGardenLayout.size, CoreSize(width: 400, height: 292))
         // The design's three source bunch centres, transformed from the supplied
