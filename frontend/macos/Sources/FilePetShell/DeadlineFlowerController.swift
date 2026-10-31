@@ -392,22 +392,23 @@ final class DeadlineFlowerView: NSView {
         NSGraphicsContext.current?.imageInterpolation = .none
         if let stage = deadlineStage, DeadlineFlowerMotion.heads.count == 6 {
             let stem = force(lag: 0), head = force(lag: 0.115)
+            let petals = (force(lag: 0.17), force(lag: 0.20), force(lag: 0.235))
             if let previousStage, let start = transitionStart {
                 let elapsed = Date().timeIntervalSince(start)
                 // Calyx-anchored upward reveal, no blurry full-flower crossfade.
                 _ = DeadlineFlowerMotion.draw(bounds: bounds, artwork: artwork, stage: previousStage,
-                    stem: stem, head: head, petal: force(lag: 0.19))
+                    stem: stem, head: head, petals: petals)
                 let portion = min(1, max(0, elapsed / 0.34))
                 let context = NSGraphicsContext.current?.cgContext
                 context?.saveGState()
                 context?.clip(to: CGRect(x: 0, y: bounds.height * (0.35 + 0.65 * (1 - portion)),
                                          width: bounds.width, height: bounds.height * portion))
                 _ = DeadlineFlowerMotion.draw(bounds: bounds, artwork: artwork, stage: stage,
-                    stem: stem, head: head, petal: force(lag: 0.19))
+                    stem: stem, head: head, petals: petals)
                 context?.restoreGState()
             } else {
                 _ = DeadlineFlowerMotion.draw(bounds: bounds, artwork: artwork, stage: stage,
-                    stem: stem, head: head, petal: force(lag: 0.19))
+                    stem: stem, head: head, petals: petals)
             }
             return
         }
