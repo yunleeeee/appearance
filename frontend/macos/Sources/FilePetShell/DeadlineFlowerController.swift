@@ -138,9 +138,9 @@ final class DeadlineFlowerController {
         reposition()
         for flower in next where existing[flower.deadline.id] == nil {
             guard visible else { continue }
+            if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { flower.panel.alphaValue = 0 }
             flower.panel.orderFrontRegardless()
             guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { continue }
-            flower.panel.alphaValue = 0
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.18
                 flower.panel.animator().alphaValue = 1
@@ -223,7 +223,12 @@ final class DeadlineFlowerController {
         popover.behavior = .applicationDefined
         popover.animates = false
         popover.contentViewController = NSHostingController(rootView:
-            DeadlineFlowerDetailsView(deadline: flower.deadline, queuedCount: garden.queuedCount, stage: garden.stage(for: flower.deadline), now: garden.currentTime))
+            DeadlineFlowerDetailsView(deadline: flower.deadline, queuedCount: garden.queuedCount,
+                stage: garden.stage(for: flower.deadline), now: garden.currentTime,
+                onOpenSource: { [path = flower.deadline.sourcePath] in
+                    guard let path else { return }
+                    NSWorkspace.shared.open(URL(fileURLWithPath: path))
+                }))
         self.popover = popover
         // Anchor to the stem's side so the card never covers the flower head.
         popover.show(relativeTo: NSRect(x: 0, y: flower.view.bounds.midY, width: 1, height: 1),
