@@ -101,7 +101,8 @@ enum DeadlineFlowerMotion {
         let placements: [(CGFloat, CGFloat, CGFloat)] = [
             (0.59, -1, 1.85), (0.36, 1, 1.55)
         ]
-        return placements.map { fraction, side, scale in
+        return placements.map { placement in
+            let (fraction, side, scale) = placement
             let attach = cubic(controls.0, controls.1, controls.2, controls.3, fraction)
             let adjusted = NSPoint(x: attach.x + leafLag * side * 0.55, y: attach.y)
             let size = CGSize(width: sprite.width * scale, height: sprite.height * scale)
