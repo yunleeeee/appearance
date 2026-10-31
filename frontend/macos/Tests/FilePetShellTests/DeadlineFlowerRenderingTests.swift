@@ -4,6 +4,35 @@ import XCTest
 
 @MainActor
 final class DeadlineFlowerRenderingTests: XCTestCase {
+    func testDynamicStageKeepsCalyxInsidePanelAndStemRootFixed() throws {
+        let artwork = CompactFlowerArtwork.plants[1]
+        let view = DeadlineFlowerView(artwork: artwork)
+        for stage in DeadlineStage.allCases {
+            let still = try XCTUnwrap(DeadlineFlowerMotion.geometry(
+                bounds: view.bounds, artwork: artwork, stage: stage, stem: 0, head: 0))
+            let swayed = try XCTUnwrap(DeadlineFlowerMotion.geometry(
+                bounds: view.bounds, artwork: artwork, stage: stage, stem: 0.8, head: 0.5))
+            XCTAssertEqual(still.root, swayed.root, "Wind cannot move the attached root")
+            XCTAssertLessThanOrEqual(still.rect.maxY, view.bounds.maxY + 0.01, stage.label)
+            XCTAssertGreaterThanOrEqual(still.rect.minY, view.bounds.minY - 0.01, stage.label)
+        }
+    }
+
+    func testDynamicTransparentPixelsPassThroughWhilePetalsAreClickable() throws {
+        let view = DeadlineFlowerView(artwork: CompactFlowerArtwork.plants[1])
+        view.deadlineStage = .bloom
+        XCTAssertFalse(view.containsArtwork(NSPoint(x: 1, y: 1)))
+        let sprite = try XCTUnwrap(DeadlineFlowerMotion.heads.last)
+        let g = try XCTUnwrap(DeadlineFlowerMotion.geometry(
+            bounds: view.bounds, artwork: view.artwork, stage: .withered, stem: 0, head: 0))
+        view.deadlineStage = .withered
+        let index = try XCTUnwrap(sprite.alpha.firstIndex(where: { $0 > 200 }))
+        let x = index % sprite.pixelsWide, y = index / sprite.pixelsWide
+        let px = g.rect.minX + (CGFloat(x) + 0.5) / CGFloat(sprite.pixelsWide) * g.rect.width
+        let py = g.rect.maxY - (CGFloat(y) + 0.5) / CGFloat(sprite.pixelsHigh) * g.rect.height
+        XCTAssertTrue(view.containsArtwork(NSPoint(x: px, y: py)))
+    }
+
     func testArtworkHitTargetsMatchTheRenderedAlpha() throws {
         for artwork in CompactFlowerArtwork.plants {
             let view = DeadlineFlowerView(artwork: artwork)
