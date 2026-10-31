@@ -69,7 +69,11 @@ enum DeadlineFlowerMotion {
         let sprite = heads[i]
         let root = NSPoint(x: artwork.stemX, y: 3)
         // Root remains fixed. Upper stem responds before head; calyx remains attached.
-        let y = bounds.height * ((stage == .drooping || stage == .withered) ? 0.66 : 0.82)
+        // Keep every approved stage crown inside the compact NSPanel. The
+        // calyx remains the stem/head joint even as petals expand or droop.
+        let requiredCrownRoom = calyxOffsets[i].1 + sprite.anchorY
+        let y = max(30, min(bounds.height * 0.74,
+                            bounds.height - 8 - requiredCrownRoom))
         let calyx = NSPoint(x: root.x + head * 2.4, y: y)
         let dx = calyxOffsets[i].0, dy = calyxOffsets[i].1
         let heart = NSPoint(x: calyx.x - dx, y: calyx.y + dy)
