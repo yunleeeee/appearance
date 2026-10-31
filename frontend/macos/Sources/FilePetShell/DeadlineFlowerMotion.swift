@@ -37,30 +37,130 @@ enum DeadlineFlowerMotion {
         (-3.60, 18.99), (3.15, -13.14), (3.51, -12.24)
     ]
 
-    static let heads: [Sprite] = {
+    private static let atlas: CGImage? = {
         let bundles = [Bundle.module, Bundle.main]
         guard let url = bundles.lazy.compactMap({
             $0.url(forResource: "FlowerAtlas", withExtension: "png", subdirectory: "Flowers")
-        }).first, let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let atlas = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return [] }
+        }).first, let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        return CGImageSourceCreateImageAtIndex(source, 0, nil)
+    }()
+
+    /// Use the original v2 leaf rather than replacing it with a bare green line.
+    /// It is decoded and cropped once; every stage shares the same texture.
+    static let leaf: Sprite? = {
+        guard let atlas else { return nil }
+        return makeSprite(atlas, x: 895, y: 654, width: 220, height: 248,
+                          nativeWidth: 9.90, nativeHeight: 11.16,
+                          anchorX: 0.90, anchorY: 10.305)
+    }()
+
+    static let heads: [Sprite] = {
+        guard let atlas else { return [] }
         return specs.compactMap { item -> Sprite? in
-            guard let img = atlas.cropping(to: CGRect(x: item.0, y: item.1,
-                width: item.2, height: item.3)) else { return nil }
-            var rgba = [UInt8](repeating: 0, count: img.width * img.height * 4)
-            rgba.withUnsafeMutableBytes { bytes in
-                if let bitmap = CGContext(data: bytes.baseAddress, width: img.width, height: img.height,
-                    bitsPerComponent: 8, bytesPerRow: img.width * 4,
-                    space: CGColorSpaceCreateDeviceRGB(),
-                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) {
-                    bitmap.draw(img, in: CGRect(x: 0, y: 0, width: img.width, height: img.height))
-                }
-            }
-            return Sprite(image: NSImage(cgImage: img, size: CGSize(width: item.4, height: item.5)),
-                width: item.4, height: item.5, anchorX: item.6, anchorY: item.7,
-                pixelsWide: img.width, pixelsHigh: img.height,
-                alpha: stride(from: 3, to: rgba.count, by: 4).map { rgba[$0] })
+            makeSprite(atlas, x: item.0, y: item.1, width: item.2, height: item.3,
+                       nativeWidth: item.4, nativeHeight: item.5,
+                       anchorX: item.6, anchorY: item.7)
         }
     }()
+
+    private static func makeSprite(_ atlas: CGImage, x: Int, y: Int, width: Int, height: Int,
+                                   nativeWidth: CGFloat, nativeHeight: CGFloat,
+                                   anchorX: CGFloat, anchorY: CGFloat) -> Sprite? {
+        guard let img = atlas.cropping(to: CGRect(x: x, y: y, width: width, height: height)) else { return nil }
+        var rgba = [UInt8](repeating: 0, count: img.width * img.height * 4)
+        rgba.withUnsafeMutableBytes { bytes in
+            if let bitmap = CGContext(data: bytes.baseAddress, width: img.width, height: img.height,
+                bitsPerComponent: 8, bytesPerRow: img.width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) {
+                bitmap.draw(img, in: CGRect(x: 0, y: 0, width: img.width, height: img.height))
+            }
+        }
+        return Sprite(image: NSImage(cgImage: img,
+            size: CGSize(width: nativeWidth, height: nativeHeight)),
+            width: nativeWidth, height: nativeHeight,
+            anchorX: anchorX, anchorY: anchorY,
+            pixelsWide: img.width, pixelsHigh: img.height,
+            alpha: stride(from: 3, to: rgba.count, by: 4).map { rgba[$0] })
+    }
+
+    struct LeafJoint {
+        let attach: NSPoint
+        let side: CGFloat
+        let size: CGSize
+        let tip: NSPoint
+    }
+
+    /// Both leaves grow from sampled cubic-stem joints. The lower leaf turns
+    /// left, the upper/right leaf balances the crown. None is a floating icon.
+    static func leaves(bounds: NSRect, artwork: CompactFlowerArtwork, stage: DeadlineStage,
+                       stem: CGFloat, head: CGFloat, leafLag: CGFloat = 0) -> [LeafJoint] {
+        guard let g = geometry(bounds: bounds, artwork: artwork, stage: stage, stem: stem, head: head),
+              let sprite = leaf else { return [] }
+        let controls = stemControls(bounds: bounds, g: g, stem: stem)
+        let placements: [(CGFloat, CGFloat, CGFloat)] = [
+            (0.59, -1, 1.85), (0.36, 1, 1.55)
+        ]
+        return placements.map { fraction, side, scale in
+            let attach = cubic(controls.0, controls.1, controls.2, controls.3, fraction)
+            let adjusted = NSPoint(x: attach.x + leafLag * side * 0.55, y: attach.y)
+            let size = CGSize(width: sprite.width * scale, height: sprite.height * scale)
+            return LeafJoint(attach: adjusted, side: side, size: size,
+                             tip: NSPoint(x: adjusted.x + side * size.width * 0.75,
+                                          y: adjusted.y + size.height * 0.55))
+        }
+    }
+
+    private static func stemControls(bounds: NSRect, g: (root: NSPoint, calyx: NSPoint, rect: NSRect),
+                                     stem: CGFloat) -> (NSPoint, NSPoint, NSPoint, NSPoint) {
+        (g.root, NSPoint(x: g.root.x + stem * 0.4, y: bounds.height * 0.25),
+         NSPoint(x: g.calyx.x + stem * 1.8, y: bounds.height * 0.63), g.calyx)
+    }
+
+    private static func cubic(_ a: NSPoint, _ b: NSPoint, _ c: NSPoint,
+                              _ d: NSPoint, _ t: CGFloat) -> NSPoint {
+        let u = 1 - t
+        return NSPoint(x: u*u*u*a.x + 3*u*u*t*b.x + 3*u*t*t*c.x + t*t*t*d.x,
+                       y: u*u*u*a.y + 3*u*u*t*b.y + 3*u*t*t*c.y + t*t*t*d.y)
+    }
+
+    private static func leafRect(_ leaf: LeafJoint, sprite: Sprite) -> CGRect {
+        let factor = leaf.size.width / sprite.width
+        let left = leaf.side > 0
+            ? leaf.attach.x - sprite.anchorX * factor
+            : leaf.attach.x - (sprite.width - sprite.anchorX) * factor
+        return CGRect(x: left, y: leaf.attach.y - (sprite.height - sprite.anchorY) * factor,
+                      width: leaf.size.width, height: leaf.size.height)
+    }
+
+    private static func drawLeaves(_ joints: [LeafJoint]) {
+        guard let sprite = leaf, let context = NSGraphicsContext.current?.cgContext else { return }
+        for joint in joints {
+            // A restrained thin petiole connects the sprite to the actual stem.
+            let petiole = NSBezierPath()
+            petiole.move(to: joint.attach)
+            petiole.line(to: NSPoint(x: joint.attach.x + joint.side * 3.5,
+                                    y: joint.attach.y + 2.0))
+            petiole.lineWidth = 1.15
+            NSColor(calibratedRed: 0.20, green: 0.35, blue: 0.24, alpha: 1).setStroke()
+            petiole.stroke()
+            let rect = leafRect(joint, sprite: sprite)
+            context.saveGState()
+            if joint.side < 0 {
+                // Keep source calyx/petiole pivot fixed while mirroring the
+                // approved texture across the lower leaf's axis.
+                context.translateBy(x: joint.attach.x, y: 0)
+                context.scaleBy(x: -1, y: 1)
+                context.translateBy(x: -joint.attach.x, y: 0)
+                let flipped = CGRect(x: 2 * joint.attach.x - rect.maxX, y: rect.minY,
+                                     width: rect.width, height: rect.height)
+                sprite.image.draw(in: flipped, from: .zero, operation: .sourceOver, fraction: 1)
+            } else {
+                sprite.image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1)
+            }
+            context.restoreGState()
+        }
+    }
 
     static func geometry(bounds: NSRect, artwork: CompactFlowerArtwork, stage: DeadlineStage,
                          stem: CGFloat, head: CGFloat) -> (root: NSPoint, calyx: NSPoint, rect: NSRect)? {
@@ -108,16 +208,10 @@ enum DeadlineFlowerMotion {
         NSColor(calibratedRed: 0.39, green: 0.56, blue: 0.37, alpha: 1).setStroke()
         second.stroke()
 
-        let leaf = NSBezierPath()
-        let joint = NSPoint(x: g.root.x + stem * 0.2, y: bounds.height * 0.33)
-        leaf.move(to: joint)
-        leaf.curve(to: NSPoint(x: joint.x + 7 + stem * 0.4, y: joint.y + 4),
-                   controlPoint1: NSPoint(x: joint.x + 3, y: joint.y + 6),
-                   controlPoint2: NSPoint(x: joint.x + 7, y: joint.y + 8))
-        leaf.lineWidth = 3
-        NSColor(calibratedRed: 0.26, green: 0.45, blue: 0.28, alpha: 1).setStroke()
-        leaf.stroke()
-
+        // Reuse the original textured leaf artwork at two real stem joints.
+        // Leaves are behind the head, and follow wind just after the stalk.
+        drawLeaves(leaves(bounds: bounds, artwork: artwork, stage: stage, stem: stem,
+                          head: head, leafLag: (petals.0 - stem)))
         let sprite = heads[stage.rawValue]
         guard let context = NSGraphicsContext.current?.cgContext else { return false }
         if stage == .bloom {
@@ -167,6 +261,18 @@ enum DeadlineFlowerMotion {
         guard let g = geometry(bounds: bounds, artwork: artwork, stage: stage,
                                stem: stem, head: head) else { return false }
         if heads[stage.rawValue].contains(point, in: g.rect) { return true }
+        if let sprite = leaf {
+            for joint in leaves(bounds: bounds, artwork: artwork, stage: stage,
+                                stem: stem, head: head) {
+                let rect = leafRect(joint, sprite: sprite)
+                let pointInSprite = joint.side < 0
+                    ? NSPoint(x: 2 * joint.attach.x - point.x, y: point.y) : point
+                let positiveRect = joint.side < 0
+                    ? CGRect(x: 2 * joint.attach.x - rect.maxX, y: rect.minY,
+                             width: rect.width, height: rect.height) : rect
+                if sprite.contains(pointInSprite, in: positiveRect) { return true }
+            }
+        }
         let t = min(1, max(0, (point.y - g.root.y) / max(1, g.calyx.y - g.root.y)))
         return point.y >= g.root.y && point.y <= g.calyx.y &&
             abs(point.x - (g.root.x * (1 - t) + g.calyx.x * t)) <= 2
