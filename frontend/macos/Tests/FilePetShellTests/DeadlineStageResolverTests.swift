@@ -38,6 +38,18 @@ final class DeadlineStageResolverTests: XCTestCase {
         XCTAssertNil(resolver.resolve(dueDate: "2026-11-20", dueTime: "25:00", now: day))
     }
 
+    func testCalendarTimeZoneIsInjectableForDateOnlyDeadlines() throws {
+        let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-11-19T18:00:00Z"))
+        var tokyo = Calendar(identifier: .gregorian)
+        tokyo.timeZone = TimeZone(secondsFromGMT: 9 * 3600)!
+        let tokyoStage = DeadlineStageResolver(calendar: tokyo)
+            .resolve(dueDate: "2026-11-20", dueTime: nil, now: now)
+        let utcStage = DeadlineStageResolver(calendar: utc)
+            .resolve(dueDate: "2026-11-20", dueTime: nil, now: now)
+        XCTAssertEqual(tokyoStage, .bloom, "It is already the deadline day in Tokyo")
+        XCTAssertEqual(utcStage, .opening, "UTC remains the previous calendar day")
+    }
+
     func testNextThresholdCanBeScheduledAndCompletedIsIndependent() throws {
         let resolver = DeadlineStageResolver(calendar: utc)
         let now = try XCTUnwrap(utc.date(from: DateComponents(
