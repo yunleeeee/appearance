@@ -33,6 +33,35 @@ final class DeadlineFlowerRenderingTests: XCTestCase {
         XCTAssertTrue(view.containsArtwork(NSPoint(x: px, y: py)))
     }
 
+    func testOriginalV2LeafSpritesAttachToTwoDistinctStemJoints() throws {
+        let artwork = CompactFlowerArtwork.plants[1]
+        let bounds = NSRect(origin: .zero, size: artwork.size)
+        let sprite = try XCTUnwrap(DeadlineFlowerMotion.leaf,
+                                  "The frozen v2 atlas must include the real leaf crop")
+        XCTAssertGreaterThan(sprite.alpha.filter { $0 > 100 }.count, 500)
+        for stage in DeadlineStage.allCases {
+            let still = DeadlineFlowerMotion.leaves(bounds: bounds, artwork: artwork,
+                stage: stage, stem: 0, head: 0)
+            let breezy = DeadlineFlowerMotion.leaves(bounds: bounds, artwork: artwork,
+                stage: stage, stem: 0.4, head: 0.3, leafLag: 0.08)
+            XCTAssertEqual(still.count, 2)
+            XCTAssertEqual(breezy.count, 2)
+            XCTAssertEqual(still[0].side, -1)
+            XCTAssertEqual(still[1].side, 1)
+            XCTAssertGreaterThan(still[0].size.width, 16, "Do not regress to tiny line leaves")
+            XCTAssertGreaterThan(still[1].size.height, 16)
+            XCTAssertGreaterThan(still[0].attach.y, still[1].attach.y,
+                                 "Leaf stems must attach at separate joints")
+            XCTAssertNotEqual(still[0].attach, breezy[0].attach,
+                              "The leaf must follow its actual stem rather than float")
+            let fixed = try XCTUnwrap(DeadlineFlowerMotion.geometry(
+                bounds: bounds, artwork: artwork, stage: stage, stem: 0, head: 0))
+            let moved = try XCTUnwrap(DeadlineFlowerMotion.geometry(
+                bounds: bounds, artwork: artwork, stage: stage, stem: 0.4, head: 0.3))
+            XCTAssertEqual(fixed.root, moved.root, "Wind must not move the planted root")
+        }
+    }
+
     func testArtworkHitTargetsMatchTheRenderedAlpha() throws {
         for artwork in CompactFlowerArtwork.plants {
             let view = DeadlineFlowerView(artwork: artwork)
