@@ -140,9 +140,11 @@ final class CompactGardenRenderingTests: XCTestCase {
         guard ProcessInfo.processInfo.environment["FILEPET_RENDER_COMPACT"] == "1" else {
             throw XCTSkip("Set FILEPET_RENDER_COMPACT=1 to export native compact garden proofs")
         }
-        let output = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent(".tmp/compact-qa", isDirectory: true)
+        let output = ProcessInfo.processInfo.environment["FILEPET_COMPACT_PROOF_DIR"]
+            .map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+                .deletingLastPathComponent().deletingLastPathComponent()
+                .appendingPathComponent(".tmp/compact-qa", isDirectory: true)
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         let cases: [(String, [VineBranch], Bool, Bool, Bool)] = [
             ("empty-dark", [], false, false, true),
