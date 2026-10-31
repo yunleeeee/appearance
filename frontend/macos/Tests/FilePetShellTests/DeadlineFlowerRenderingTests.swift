@@ -44,10 +44,12 @@ final class DeadlineFlowerRenderingTests: XCTestCase {
                 stage: stage, stem: 0, head: 0)
             let breezy = DeadlineFlowerMotion.leaves(bounds: bounds, artwork: artwork,
                 stage: stage, stem: 0.4, head: 0.3, leafLag: 0.08)
-            XCTAssertEqual(still.count, 2)
-            XCTAssertEqual(breezy.count, 2)
+            XCTAssertEqual(still.count, 3)
+            XCTAssertEqual(breezy.count, 3)
             XCTAssertEqual(still[0].side, -1)
             XCTAssertEqual(still[1].side, 1)
+            XCTAssertEqual(still[2].side, -1)
+            XCTAssertLessThan(still[2].size.width, still[0].size.width)
             XCTAssertGreaterThan(still[0].size.width, 16, "Do not regress to tiny line leaves")
             XCTAssertGreaterThan(still[1].size.height, 16)
             XCTAssertGreaterThan(still[0].attach.y, still[1].attach.y,
