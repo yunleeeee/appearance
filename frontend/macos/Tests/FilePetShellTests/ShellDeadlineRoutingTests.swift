@@ -76,7 +76,7 @@ final class ShellDeadlineRoutingTests: XCTestCase {
         await firstStore.waitUntilIdle()
         XCTAssertEqual(firstStore.vine.count(for: "learning"), 2)
         XCTAssertEqual(firstStore.results.map(\.outcome), [.classified])
-        XCTAssertTrue(firstStore.results[0].detail.contains("已分类"))
+        XCTAssertTrue(firstStore.results[0].detail.contains("已计数"))
 
         let restoredStore = makeStore(GardenShellEngine(results: [response, response]),
                                      defaults: UserDefaults(suiteName: suite)!)
