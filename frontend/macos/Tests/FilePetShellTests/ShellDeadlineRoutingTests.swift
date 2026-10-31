@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class ShellDeadlineRoutingTests: XCTestCase {
-    func testDDLResultsTakeFlowerRouteEvenWhenTopicClassificationSucceeds() async {
+    func testDDLAndGrapeAreBothRecordedWhenTopicClassificationSucceeds() async {
         let (defaults, suite) = isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
         let candidates = (1...5).map { deadline("ddl-\($0)") }
@@ -17,7 +17,8 @@ final class ShellDeadlineRoutingTests: XCTestCase {
         XCTAssertEqual(store.results.map(\.outcome), [.deadline])
         XCTAssertEqual(store.garden.visibleDeadlines.map(\.id), ["ddl-1", "ddl-2", "ddl-3"])
         XCTAssertEqual(store.garden.queuedCount, 2)
-        XCTAssertEqual(store.vine.totalGrapes, 0)
+        XCTAssertEqual(store.vine.totalGrapes, 1)
+        XCTAssertEqual(store.vine.count(for: "learning"), 1)
         XCTAssertTrue(store.status.contains("1 份 DDL"))
     }
 
@@ -31,7 +32,7 @@ final class ShellDeadlineRoutingTests: XCTestCase {
         store.classifyFiles([file("unclassified-notice.txt")])
         await store.waitUntilIdle()
 
-        XCTAssertEqual(store.results.map(\.outcome), [.deadline])
+        XCTAssertEqual(store.results.map(\.outcome), [.needsReview])
         XCTAssertEqual(store.garden.visibleDeadlines.map(\.id), ["only-ddl"])
         XCTAssertEqual(store.vine.totalGrapes, 0)
     }
@@ -57,7 +58,7 @@ final class ShellDeadlineRoutingTests: XCTestCase {
         XCTAssertEqual(restoredStore.garden.visibleDeadlines.map(\.id), ["ddl-2", "ddl-3", "ddl-4"])
         XCTAssertEqual(restoredStore.garden.queuedCount, 0)
         XCTAssertEqual(restoredStore.results.map(\.outcome), [.deadline])
-        XCTAssertEqual(restoredStore.vine.totalGrapes, 0)
+        XCTAssertEqual(restoredStore.vine.totalGrapes, 1)
     }
 
     func testEachNewOrdinaryFileAddsOneGrapeToItsCategoryAndRepeatedFeedDoesNot() async {
