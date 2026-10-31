@@ -42,6 +42,7 @@ final class DeadlineVisualProofTests: XCTestCase {
         }
 
         let windView = DeadlineFlowerView(artwork: artwork)
+        windView.reduceMotionOverride = false // CI host accessibility settings must not hide the motion proof.
         windView.deadlineStage = .bloom
         for i in 0..<120 {
             windView.previewWindAge = Double(i) / 24 - 0.5
@@ -63,6 +64,17 @@ final class DeadlineVisualProofTests: XCTestCase {
         XCTAssertEqual(first, second, "Reduce Motion must suppress ongoing wind")
         view.deadlineStage = .withered
         XCTAssertNotEqual(first, try imageData(view), "Distinct deadlines must remain visually legible")
+    }
+
+    func testBreezeProofHasRealDifferentialMotion() throws {
+        let view = DeadlineFlowerView(artwork: CompactFlowerArtwork.plants[1])
+        view.reduceMotionOverride = false
+        view.deadlineStage = .bloom
+        view.previewWindAge = 0.52
+        let pushed = try imageData(view)
+        view.previewWindAge = 1.27
+        let recovery = try imageData(view)
+        XCTAssertNotEqual(pushed, recovery, "Preview movie must contain real rendered motion")
     }
 
     private func imageData(_ view: DeadlineFlowerView) throws -> Data {
