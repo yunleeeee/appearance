@@ -28,8 +28,10 @@ jobs:
         run: swift test --parallel
       - name: Encode runtime stage and breeze captures
         if: always()
+        env:
+          PROOFS: ${{ github.workspace }}/artifacts/flower-v2
         run: |
-          if [ ! -d artifacts/flower-v2/six-stages ]; then
+          if [ ! -d "$PROOFS/six-stages" ]; then
             echo "Renderer did not produce proofs (likely build/test failure)."
             exit 0
           fi
@@ -38,11 +40,11 @@ jobs:
           fi
           if command -v ffmpeg >/dev/null 2>&1; then
             ffmpeg -hide_banner -loglevel error -y -framerate 24 \
-              -i artifacts/flower-v2/stage-change-frames/frame-%03d.png \
-              -c:v libx264 -pix_fmt yuv420p artifacts/flower-v2/stage-change.mp4
+              -i "$PROOFS/stage-change-frames/frame-%03d.png" \
+              -c:v libx264 -pix_fmt yuv420p "$PROOFS/stage-change.mp4"
             ffmpeg -hide_banner -loglevel error -y -framerate 24 \
-              -i artifacts/flower-v2/resident-breeze-frames/frame-%03d.png \
-              -c:v libx264 -pix_fmt yuv420p artifacts/flower-v2/resident-breeze.mp4
+              -i "$PROOFS/resident-breeze-frames/frame-%03d.png" \
+              -c:v libx264 -pix_fmt yuv420p "$PROOFS/resident-breeze.mp4"
           else
             echo "ffmpeg unavailable: PNG frame sequences remain for reproduction."
           fi
