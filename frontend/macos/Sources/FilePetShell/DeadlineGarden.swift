@@ -96,6 +96,24 @@ final class DeadlineGarden: ObservableObject {
     }
 
     @discardableResult
+    func edit(id: String, title: String, project: String, dueDate: String,
+              dueTime: String?) -> String? {
+        if let error = DeadlineInput.validationError(title: title, project: project,
+            dueDate: dueDate, dueTime: dueTime) { return error }
+        guard let index = deadlines.firstIndex(where: { $0.id == id }) else {
+            return "找不到对应的 DDL。"
+        }
+        let previous = deadlines[index]
+        var updated = deadlines
+        updated[index] = GardenDeadline(id: id, title: title, project: project,
+            dueDate: dueDate, dueTime: dueTime, yearInferred: false,
+            evidence: previous.evidence, createdAt: previous.createdAt,
+            completedAt: previous.completedAt, sourcePath: previous.sourcePath)
+        save(updated)
+        return persistenceError
+    }
+
+    @discardableResult
     func undoLastHarvest() -> String? {
         guard let index = deadlines.indices.filter({ deadlines[$0].completedAt != nil })
             .max(by: { deadlines[$0].completedAt! < deadlines[$1].completedAt! }) else { return nil }
