@@ -43,6 +43,12 @@ final class DeadlineGarden: ObservableObject {
 
     var activeDeadlines: [GardenDeadline] { deadlines.filter { $0.completedAt == nil } }
 
+    func nextStageBoundary(after now: Date) -> Date? {
+        activeDeadlines.compactMap {
+            resolver.nextChange(dueDate: $0.dueDate, dueTime: $0.dueTime, now: now)
+        }.min()
+    }
+
     func stage(for deadline: GardenDeadline, now: Date? = nil) -> DeadlineStage? {
         resolver.resolve(dueDate: deadline.dueDate, dueTime: deadline.dueTime,
                          completedAt: deadline.completedAt, now: now ?? currentTime)
