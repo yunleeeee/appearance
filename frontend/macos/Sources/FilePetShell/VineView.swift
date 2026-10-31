@@ -94,22 +94,45 @@ enum CompactGrapeLayout {
         ]
         if count <= first.count {
             return first.prefix(count).map {
-                Berry(center: CGPoint(x: $0.0, y: $0.1), size: CGSize(width: $0.2, height: $0.2 * 1.04), depth: $0.3)
+                Berry(center: CGPoint(x: 32 + ($0.0 - 32) * 0.88, y: 12 + $0.1 * 0.80),
+                      size: CGSize(width: $0.2 * 0.82, height: $0.2 * 0.84), depth: $0.3)
             }
         }
-        let columns = max(4, Int(ceil(sqrt(Double(count) * 0.72))))
-        let rows = Int(ceil(Double(count) / Double(columns)))
-        let side = min(60 / CGFloat(columns), 82 / CGFloat(rows))
-        let xInset: CGFloat = (64 - CGFloat(columns) * side) / 2
-        let berrySize = CGSize(width: side * 1.08, height: side * 1.10)
-        return (0..<count).map { index -> Berry in
-            let column = CGFloat(index % columns)
-            let row = CGFloat(index / columns)
-            let center = CGPoint(x: column * side + xInset + side / 2,
-                                 y: row * side + side / 2)
-            let depth = Double(index % 2) * 0.1
-            return Berry(center: center, size: berrySize, depth: depth)
+        // Shape dense grape bunches as a hanging, tapered cluster rather than
+        // switching from hand-placed berries to a rectangular spreadsheet grid.
+        // Every real file still owns exactly one visible berry.
+        let rows = max(5, Int(ceil(sqrt(Double(count) * 1.55))))
+        var widest = max(4, Int(ceil(Double(count) / (Double(rows) * 0.70))))
+        func capacities(_ width: Int) -> [Int] {
+            (0..<rows).map { row in
+                let taper = 1.0 - 0.56 * Double(row) / Double(max(1, rows - 1))
+                return max(2, Int((Double(width) * taper).rounded()))
+            }
         }
+        var rowsOfFruit = capacities(widest)
+        while rowsOfFruit.reduce(0, +) < count {
+            widest += 1
+            rowsOfFruit = capacities(widest)
+        }
+
+        let horizontalStep = min(CGFloat(15), 60 / CGFloat(widest))
+        let verticalStep = min(CGFloat(13), 72 / CGFloat(rows))
+        let diameter = min(CGFloat(18), horizontalStep * 1.11, verticalStep * 1.13)
+        let size = CGSize(width: diameter, height: diameter * 1.04)
+        var output: [Berry] = []
+        output.reserveCapacity(count)
+        for row in rowsOfFruit.indices {
+            let amount = min(rowsOfFruit[row], count - output.count)
+            if amount <= 0 { break }
+            for column in 0..<amount {
+                let stagger: CGFloat = row.isMultiple(of: 2) ? -0.10 : 0.10
+                let x = 32 + (CGFloat(column) - CGFloat(amount - 1) / 2 + stagger) * horizontalStep
+                let y = 14 + (CGFloat(row) + 0.5) * verticalStep
+                output.append(Berry(center: CGPoint(x: x, y: y), size: size,
+                                    depth: Double((column + row) % 3) * 0.05))
+            }
+        }
+        return output
     }
 }
 
@@ -122,6 +145,11 @@ struct GrapeClusterView: View {
     var body: some View {
         let berries = CompactGrapeLayout.berries(count: branch.count)
         ZStack(alignment: .topLeading) {
+            if !berries.isEmpty {
+                GrapeCrownView()
+                    .frame(width: 64, height: 30)
+                    .allowsHitTesting(false)
+            }
             ForEach(Array(berries.indices.sorted { berries[$0].depth > berries[$1].depth }), id: \.self) { index in
                 PixelGrapeBerry(category: branch.id,
                     shouldGrow: growth?.category == branch.id && growth?.grapeIndex == index,
@@ -131,6 +159,44 @@ struct GrapeClusterView: View {
             }
         }
         .frame(width: 64, height: 88)
+    }
+}
+
+/// A tiny native fruit stalk and two original textured leaves. Reuses the
+/// approved v2 leaf crop for a consistent plant vocabulary; no vector glow,
+/// breathing, overlay counter, or extra phantom grapes.
+private struct GrapeCrownView: View {
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Canvas { context, _ in
+                let stalk = Path { p in
+                    p.move(to: CGPoint(x: 32, y: 0))
+                    p.addLine(to: CGPoint(x: 32, y: 12))
+                    p.addLine(to: CGPoint(x: 28, y: 18))
+                }
+                context.stroke(stalk, with: .color(Color(red: 0.22, green: 0.35, blue: 0.22)),
+                               style: StrokeStyle(lineWidth: 2, lineCap: .square))
+                let light = Path { p in
+                    p.move(to: CGPoint(x: 33, y: 2))
+                    p.addLine(to: CGPoint(x: 33, y: 11))
+                }
+                context.stroke(light, with: .color(Color(red: 0.39, green: 0.52, blue: 0.32)),
+                               lineWidth: 1)
+            }
+            if let leaf = DeadlineFlowerMotion.leaf?.image {
+                Image(nsImage: leaf)
+                    .resizable()
+                    .interpolation(.none)
+                    .frame(width: 15, height: 17)
+                    .scaleEffect(x: -1, y: 1)
+                    .position(x: 24, y: 9)
+                Image(nsImage: leaf)
+                    .resizable()
+                    .interpolation(.none)
+                    .frame(width: 13, height: 15)
+                    .position(x: 39, y: 8)
+            }
+        }
     }
 }
 
