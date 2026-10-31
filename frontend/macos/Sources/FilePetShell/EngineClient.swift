@@ -39,6 +39,7 @@ struct EngineClassificationResult: Codable, Equatable, Sendable {
     let matchedKeywords: [String]
     let reason: String
     let extractionChars: Int
+    var deadlines: [EngineDeadline] = []
 
     enum CodingKeys: String, CodingKey {
         case path, status, confidence, reason
@@ -47,6 +48,43 @@ struct EngineClassificationResult: Codable, Equatable, Sendable {
         case categoryLabel = "category_label"
         case matchedKeywords = "matched_keywords"
         case extractionChars = "extraction_chars"
+        case deadlines
+    }
+}
+
+extension EngineClassificationResult {
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        path = try values.decode(String.self, forKey: .path)
+        fileName = try values.decode(String.self, forKey: .fileName)
+        status = try values.decode(String.self, forKey: .status)
+        categoryID = try values.decodeIfPresent(String.self, forKey: .categoryID)
+        categoryLabel = try values.decodeIfPresent(String.self, forKey: .categoryLabel)
+        confidence = try values.decode(Double.self, forKey: .confidence)
+        matchedKeywords = try values.decode([String].self, forKey: .matchedKeywords)
+        reason = try values.decode(String.self, forKey: .reason)
+        extractionChars = try values.decode(Int.self, forKey: .extractionChars)
+        deadlines = try values.decodeIfPresent([EngineDeadline].self, forKey: .deadlines) ?? []
+    }
+}
+
+struct EngineDeadline: Codable, Equatable, Sendable, Identifiable {
+    let id: String
+    let title: String
+    let project: String
+    let dueDate: String
+    let dueTime: String?
+    let yearInferred: Bool
+    let evidence: String
+    var signal: String? = nil
+
+    var requiresConfirmation: Bool { signal == "ocr_deadline" }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, project, evidence, signal
+        case dueDate = "due_date"
+        case dueTime = "due_time"
+        case yearInferred = "year_inferred"
     }
 }
 

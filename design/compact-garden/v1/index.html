@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN" data-state="flowers" data-background="desktop">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>轻盈像素挂件 · 外观核对</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden}body{background:#18252a}#wallpaper,#desktop{position:absolute;inset:0;width:100%;height:100%}#desktop{object-fit:cover}html[data-background="light"] body{background:#f2f0e9}html[data-background="dark"] body{background:#182127}html:not([data-background="complex"]) #wallpaper{display:none}html:not([data-background="desktop"]) #desktop{display:none}#plants{position:absolute;right:0;bottom:0;width:415px;height:300px;transform-origin:bottom right;pointer-events:none}#flowers,#trellis{position:absolute;display:block;overflow:visible;image-rendering:pixelated}#flowers{right:13px;bottom:0;width:289px;height:148px}#trellis{right:15px;bottom:72px;width:400px;height:292px}html[data-state="flowers"] #trellis{display:none}.foliage{filter:saturate(.55) brightness(.98) contrast(.92)}.trellis-secondary{filter:saturate(.48) brightness(.89) contrast(.83)}
+</style>
+</head>
+<body>
+<!-- A plant-free crop of the supplied wallpaper serves only as a complex-background proof. -->
+<svg id="wallpaper" viewBox="60 40 840 960" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><image href="../../grounded-garden/v1/desktop-flowers-only.png" width="1555" height="1012"/></svg>
+<img id="desktop" src="desktop-background.png" alt="" aria-hidden="true">
+<div id="plants"></div>
+<script src="preview.js"></script>
+</body>
+</html>

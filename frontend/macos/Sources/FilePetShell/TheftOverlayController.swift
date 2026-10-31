@@ -10,6 +10,7 @@ private final class TheftPanel: NSPanel {
 private struct LiveTheftScene: View {
     let event: VineTheft
     let origin: CGPoint
+    let grapeVisualScale: Double
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -18,7 +19,7 @@ private struct LiveTheftScene: View {
         TimelineView(.animation(minimumInterval: reduceMotion ? 1.0 / 12 : 1.0 / 60)) { timeline in
             TheftScene(category: event.category, origin: origin,
                        elapsed: timeline.date.timeIntervalSince(event.startedAt),
-                       reducedMotion: reduceMotion)
+                       reducedMotion: reduceMotion, grapeVisualScale: grapeVisualScale)
         }
     }
 }
@@ -44,9 +45,12 @@ final class TheftOverlayController {
             return
         }
         let area = screen.visibleFrame
-        let x = VineGeometry.branchX(event.branchIndex)
-        let time = event.startedAt.timeIntervalSinceReferenceDate
-        let localGrape = CGPoint(x: x, y: VineGeometry.height(at: x, time: time) + 65)
+        let time = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            ? 0 : event.startedAt.timeIntervalSinceReferenceDate
+        let categoryCount = max(1, model.branches.count)
+        let anchor = CompactGardenLayout.branchAnchor(index: event.branchIndex, total: categoryCount, time: time)
+        let localGrape = CGPoint(x: anchor.x, y: anchor.y)
+        let grapeVisualScale = CompactGardenLayout.branchScale(total: categoryCount)
         let screenGrape = CGPoint(x: vinePanel.frame.minX + localGrape.x,
                                   y: vinePanel.frame.maxY - localGrape.y)
         let origin = CGPoint(x: screenGrape.x - area.minX, y: area.maxY - screenGrape.y)
@@ -61,7 +65,7 @@ final class TheftOverlayController {
         overlay.isReleasedWhenClosed = false
         overlay.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         overlay.ignoresMouseEvents = true
-        let hosting = NSHostingView(rootView: LiveTheftScene(event: event, origin: origin))
+        let hosting = NSHostingView(rootView: LiveTheftScene(event: event, origin: origin, grapeVisualScale: grapeVisualScale))
         hosting.frame = CGRect(origin: .zero, size: area.size)
         overlay.contentView = hosting
         overlay.orderFrontRegardless()

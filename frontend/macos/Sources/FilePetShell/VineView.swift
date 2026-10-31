@@ -1,233 +1,153 @@
 import SwiftUI
 
-/// 葡萄藤自动淡出；花朵设计预览始终留在独立的展示层。
+/// The native app draws the approved pixel trellis, never the old curved vine.
+/// Flowers keep their independent always-present windows and real DDL identities.
 struct VineView: View {
     @ObservedObject var model: VineModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    static let size = CGSize(width: 520, height: 250)
-
-    private var animating: Bool {
-        model.phase != .hidden && !reduceMotion
-    }
+    static let size = CGSize(width: 400, height: 292)
+    private var animating: Bool { model.phase != .hidden && !reduceMotion }
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !animating)) { timeline in
-                let time = animating ? timeline.date.timeIntervalSinceReferenceDate : 0
-                ZStack(alignment: .topLeading) {
-                    ZStack(alignment: .topLeading) {
-                        VineArtwork(time: time, foreground: false)
-
-                        ForEach(Array(model.branches.enumerated()), id: \.element.id) { index, branch in
-                            let x = VineGeometry.branchX(index)
-                            let y = VineGeometry.height(at: x, time: time)
-                            VineBranchView(
-                                branch: branch,
-                                index: index,
-                                time: time,
-                                growth: model.latestGrowth,
-                                reduceMotion: reduceMotion,
-                                hidesGrapes: model.activeTheft?.category == branch.id
-                            )
-                            .position(x: x, y: y + 53)
-                        }
-
-                        VineArtwork(time: time, foreground: true)
-                    }
-                    .frame(width: Self.size.width, height: Self.size.height)
-                    .opacity(model.isVisible ? 1 : 0)
-                    .animation(.easeInOut(duration: reduceMotion ? 0.15 : (model.isVisible ? 0.45 : 0.5)),
-                               value: model.isVisible)
-
-                    DeadlineFlowerPreviewView(time: time)
-                }
-                .frame(width: Self.size.width, height: Self.size.height)
-            }
-            .frame(width: Self.size.width, height: Self.size.height)
+        TimelineView(.animation(minimumInterval: 1.0 / 24, paused: !animating)) { timeline in
+            CompactGardenContentView(branches: model.branches, growth: model.latestGrowth,
+                activeTheftCategory: model.activeTheft?.category,
+                time: animating ? timeline.date.timeIntervalSinceReferenceDate : 0,
+                reduceMotion: reduceMotion)
         }
         .frame(width: Self.size.width, height: Self.size.height)
+        .opacity(model.isVisible ? 1 : 0)
+        .animation(.easeInOut(duration: reduceMotion ? 0.15 : 0.45), value: model.isVisible)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("文件分类葡萄藤；常驻花朵设计预览：含苞、待放、初绽、盛放、萎垂、凋零")
-        .accessibilityValue(model.branches.map { "\(model.displayName(for: $0.id))，累计分类反馈 \(model.count(for: $0.id)) 次" }.joined(separator: "；"))
+        .accessibilityLabel("轻盈像素葡萄架")
+        .accessibilityValue(model.branches.map {
+            "\(model.displayName(for: $0.id))，已分类 \(model.count(for: $0.id)) 个文件"
+        }.joined(separator: "；"))
     }
 }
 
-private struct VineBranchView: View {
-    let branch: VineBranch
-    let index: Int
-    let time: TimeInterval
+/// A deterministic native scene shared by live rendering and visual checks.
+struct CompactGardenContentView: View {
+    let branches: [VineBranch]
     let growth: VineGrowth?
+    let activeTheftCategory: String?
+    let time: TimeInterval
     let reduceMotion: Bool
-    let hidesGrapes: Bool
-
-    @State private var extended = false
-    @State private var weight = false
-
-    private var newBranch: Bool {
-        growth?.category == branch.id && growth?.grapeIndex == 0
-    }
 
     var body: some View {
-        let swing = sin(time * 1.32 + Double(index) * 0.82) * 2.0
         ZStack(alignment: .topLeading) {
-            BranchStemShape(bend: CGFloat(index % 2 == 0 ? 1 : -1))
-                .trim(from: 0, to: extended ? 1 : 0)
-                .stroke(Color(red: 0.34, green: 0.25, blue: 0.12),
-                        style: StrokeStyle(lineWidth: 4.4, lineCap: .round, lineJoin: .round))
-                .frame(width: 64, height: 34)
-            BranchStemShape(bend: CGFloat(index % 2 == 0 ? 1 : -1))
-                .trim(from: 0, to: extended ? 1 : 0)
-                .stroke(Color(red: 0.76, green: 0.61, blue: 0.25),
-                        style: StrokeStyle(lineWidth: 2.1, lineCap: .round))
-                .frame(width: 64, height: 34)
-
-            GrapeClusterView(branch: branch, growth: growth, reduceMotion: reduceMotion)
-                .frame(width: 64, height: 88)
-                .offset(y: 24)
-                .opacity(hidesGrapes ? 0 : 1)
-
-            // 每串自己的小叶随新分枝展开，叶柄与葡萄的悬挂点连在一起。
-            Canvas { context, _ in
-                VinePainter.leaf(in: &context, at: CGPoint(x: 35, y: 13),
-                                 size: 31, angle: index % 2 == 0 ? 53 : -49,
-                                 variant: index, time: time)
-            }
-            .frame(width: 64, height: 44)
-            .scaleEffect(extended ? 1 : 0.05, anchor: UnitPoint(x: 0.55, y: 0.30))
-        }
-        .frame(width: 64, height: 112, alignment: .topLeading)
-        .rotationEffect(.degrees(swing + (weight ? 2.2 : 0)), anchor: .top)
-        .offset(y: weight ? 2 : 0)
-        .onAppear {
-            if newBranch && !reduceMotion {
-                withAnimation(.easeOut(duration: 0.38)) { extended = true }
-            } else {
-                extended = true
+            Image(decorative: CompactGardenArtwork.croppedTrellis, scale: 1)
+                .resizable()
+                .interpolation(.none)
+                .frame(width: VineView.size.width, height: VineView.size.height)
+            ForEach(Array(branches.enumerated()), id: \.element.id) { index, branch in
+                let anchor = CompactGardenLayout.branchAnchor(index: index, total: branches.count, time: time)
+                let scale = CompactGardenLayout.branchScale(total: branches.count)
+                if branches.count > 3 {
+                    CompactBranchStem(anchor: CGPoint(x: anchor.x, y: anchor.y), scale: scale)
+                }
+                GrapeClusterView(branch: branch, growth: growth, reduceMotion: reduceMotion)
+                    .frame(width: 64, height: 88)
+                    .scaleEffect(scale)
+                    .rotationEffect(.degrees(reduceMotion ? 0 : sin(time * 1.25 + Double(index) * 0.8) * 0.7), anchor: .top)
+                    .position(x: anchor.x, y: anchor.y)
+                    .opacity(activeTheftCategory == branch.id ? 0 : 1)
             }
         }
-        .task(id: growth?.sequence) {
-            guard !reduceMotion, growth?.category == branch.id, branch.count > 1 else { return }
-            withAnimation(.easeOut(duration: 0.14)) { weight = true }
-            do { try await Task.sleep(nanoseconds: 140_000_000) } catch { return }
-            withAnimation(.spring(response: 0.65, dampingFraction: 0.40)) {
-                weight = false
+        .frame(width: VineView.size.width, height: VineView.size.height)
+        .clipped()
+    }
+}
+
+private struct CompactBranchStem: View {
+    let anchor: CGPoint
+    let scale: Double
+
+    var body: some View {
+        Canvas { context, _ in
+            let endY = max(49, anchor.y - 32 * scale)
+            let x = anchor.x.rounded()
+            context.fill(Path(CGRect(x: x, y: 47, width: 1, height: endY - 47)),
+                         with: .color(Color(red: 0.34, green: 0.39, blue: 0.21)))
+            context.fill(Path(CGRect(x: x - 1, y: endY - 3, width: 2, height: 4)),
+                         with: .color(Color(red: 0.47, green: 0.49, blue: 0.28)))
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+enum CompactGrapeLayout {
+    struct Berry {
+        let center: CGPoint
+        let size: CGSize
+        let depth: Double
+    }
+
+    static func berries(count: Int) -> [Berry] {
+        guard count > 0 else { return [] }
+        let first: [(CGFloat, CGFloat, CGFloat, Double)] = [
+            (32, 18, 21, 0.0), (20, 28, 21, 0.1), (44, 28, 21, 0.1),
+            (31, 40, 22, 0.0), (13, 43, 20, 0.1), (51, 43, 20, 0.1),
+            (22, 55, 21, 0.0), (41, 56, 21, 0.0), (31, 71, 21, 0.0),
+            (34, 10, 19, 0.2), (14, 16, 19, 0.2), (50, 17, 19, 0.2),
+        ]
+        if count <= first.count {
+            return first.prefix(count).map {
+                Berry(center: CGPoint(x: $0.0, y: $0.1), size: CGSize(width: $0.2, height: $0.2 * 1.04), depth: $0.3)
             }
+        }
+        let columns = max(4, Int(ceil(sqrt(Double(count) * 0.72))))
+        let rows = Int(ceil(Double(count) / Double(columns)))
+        let side = min(60 / CGFloat(columns), 82 / CGFloat(rows))
+        return (0..<count).map { index in
+            Berry(center: CGPoint(x: CGFloat(index % columns) * side + (64 - CGFloat(columns) * side) / 2 + side / 2,
+                                  y: CGFloat(index / columns) * side + side / 2),
+                  size: CGSize(width: side * 1.08, height: side * 1.10), depth: Double(index % 2) * 0.1)
         }
     }
 }
 
-private struct BranchStemShape: Shape {
-    let bend: CGFloat
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let x = rect.midX
-        path.move(to: CGPoint(x: x - 7 * bend, y: 0))
-        path.addCurve(to: CGPoint(x: x + 1, y: rect.height),
-                      control1: CGPoint(x: x + 12 * bend, y: 8),
-                      control2: CGPoint(x: x - 10 * bend, y: 19))
-        path.move(to: CGPoint(x: x, y: rect.height - 9))
-        path.addQuadCurve(to: CGPoint(x: x - 13, y: rect.height + 5),
-                          control: CGPoint(x: x - 12, y: rect.height - 8))
-        path.move(to: CGPoint(x: x + 1, y: rect.height - 12))
-        path.addQuadCurve(to: CGPoint(x: x + 13, y: rect.height + 3),
-                          control: CGPoint(x: x + 12, y: rect.height - 12))
-        return path
-    }
-}
-
+/// Shared by the native hanging fruit and Jerry's falling/carrying scene.
 struct GrapeClusterView: View {
     let branch: VineBranch
     let growth: VineGrowth?
     let reduceMotion: Bool
 
-    /// 先形成三角骨架，再补上后排果实；满串呈上宽下尖的自然轮廓。
-    private static let berries: [(x: CGFloat, y: CGFloat, size: CGFloat, depth: Double)] = [
-        (32, 17, 20, 0.03), (20, 25, 21, 0.12), (44, 27, 20, 0.18),
-        (31, 37, 22, 0.03), (14, 42, 20, 0.06), (49, 44, 20, 0.12),
-        (22, 55, 21, 0.02), (40, 57, 22, 0.05), (31, 72, 21, 0.02),
-        (34, 9, 19, 0.18), (17, 15, 19, 0.11), (48, 17, 19, 0.15),
-    ]
-
     var body: some View {
+        let berries = CompactGrapeLayout.berries(count: branch.count)
         ZStack(alignment: .topLeading) {
-            // 后排先绘制，保证果粒相互遮挡的层次始终正确。
-            ForEach(Array((0..<min(branch.count, VineModel.grapesPerBranchLimit)).sorted {
-                Self.berries[$0].depth > Self.berries[$1].depth
-            }), id: \.self) { index in
-                let berry = Self.berries[index]
-                GrapeBerryView(
-                    category: branch.id,
-                    variation: index,
-                    depth: berry.depth,
+            ForEach(Array(berries.indices.sorted { berries[$0].depth > berries[$1].depth }), id: \.self) { index in
+                PixelGrapeBerry(category: branch.id,
                     shouldGrow: growth?.category == branch.id && growth?.grapeIndex == index,
-                    reduceMotion: reduceMotion
-                )
-                .frame(width: berry.size, height: berry.size * 1.10)
-                .position(x: berry.x, y: berry.y)
+                    sequence: growth?.sequence, reduceMotion: reduceMotion)
+                    .frame(width: berries[index].size.width, height: berries[index].size.height)
+                    .position(berries[index].center)
             }
         }
+        .frame(width: 64, height: 88)
     }
 }
 
-private struct GrapeBerryView: View {
+private struct PixelGrapeBerry: View {
     let category: String
-    let variation: Int
-    let depth: Double
     let shouldGrow: Bool
+    let sequence: UInt64?
     let reduceMotion: Bool
-
-    @State private var grown = false
+    @State private var scale: CGFloat = 1
 
     var body: some View {
-        let color = GrapePalette.color(for: category).blend(with: .black, t: depth)
-        GeometryReader { geometry in
-            let w = geometry.size.width
-            let h = geometry.size.height
-            ZStack {
-                Ellipse()
-                    .fill(RadialGradient(
-                        colors: [GrapePalette.highlight(for: category), color,
-                                 GrapePalette.shade(for: category)],
-                        center: UnitPoint(x: 0.26, y: 0.22), startRadius: 0,
-                        endRadius: w * 0.95))
-                Ellipse()
-                    .strokeBorder(GrapePalette.outline(for: category), lineWidth: 0.85)
-                // 冷色反光与暖色高光，让果粒保持手绘动画的光泽。
-                Ellipse()
-                    .trim(from: 0.03, to: 0.28)
-                    .stroke(GrapePalette.highlight(for: category).opacity(0.55),
-                            style: StrokeStyle(lineWidth: 1.1, lineCap: .round))
-                    .frame(width: w * 0.80, height: h * 0.82)
-                    .rotationEffect(.degrees(18))
-                Ellipse()
-                    .fill(Color(red: 1, green: 0.98, blue: 0.87).opacity(0.83))
-                    .frame(width: w * 0.20, height: h * 0.30)
-                    .rotationEffect(.degrees(30))
-                    .offset(x: -w * 0.23, y: -h * 0.23)
-                Circle()
-                    .fill(.white.opacity(0.87))
-                    .frame(width: w * 0.10, height: w * 0.10)
-                    .offset(x: -w * 0.08, y: -h * 0.36)
-                Circle()
-                    .fill(GrapePalette.highlight(for: category).opacity(0.38))
-                    .frame(width: w * 0.12, height: w * 0.12)
-                    .offset(x: w * 0.20, y: h * 0.21)
+        Image(decorative: CompactGardenArtwork.berry(for: category), scale: 1)
+            .resizable()
+            .interpolation(.none)
+            .scaleEffect(scale, anchor: .top)
+            .task(id: sequence) {
+                scale = 1
+                guard shouldGrow, !reduceMotion else { return }
+                scale = 0.08
+                await Task.yield()
+                guard !Task.isCancelled else { scale = 1; return }
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) { scale = 1 }
             }
-            .rotationEffect(.degrees(Double(variation % 3 - 1) * 8))
-            .scaleEffect(grown ? 1 : 0.05, anchor: .top)
-            .opacity(grown ? 1 : 0)
-            .offset(y: grown ? 0 : -6)
-        }
-        .onAppear {
-            if shouldGrow && !reduceMotion {
-                withAnimation(.spring(response: 0.58, dampingFraction: 0.52).delay(0.18)) {
-                    grown = true
-                }
-            } else {
-                grown = true
-            }
-        }
     }
 }

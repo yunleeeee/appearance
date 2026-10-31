@@ -8,7 +8,7 @@ let package = Package(
         .executableTarget(
             name: "FilePetShell",
             path: "Sources/FilePetShell",
-            resources: [.copy("Resources/Characters"), .copy("Resources/Flowers")]
+            resources: [.copy("Resources/Characters"), .copy("Resources/Flowers"), .copy("Resources/Garden")]
         ),
         .testTarget(
             name: "FilePetShellTests",

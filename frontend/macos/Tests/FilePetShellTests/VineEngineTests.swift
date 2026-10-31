@@ -214,4 +214,33 @@ final class VineEngineTests: XCTestCase {
         let encoded = try JSONEncoder().encode(engine.snapshot)
         XCTAssertEqual(try JSONDecoder().decode(VineSnapshot.self, from: encoded), engine.snapshot)
     }
+
+    func testInventoryModeKeepsEveryGrapeOnOneBranchWithoutAutomaticHarvestAndRestoresCounts() {
+        let storage = MemoryVineStorage()
+        let engine = VineEngine(storage: storage, now: epoch, inventoryMode: true)
+        feed(engine, count: 25, category: "finance")
+        engine.advance(to: epoch.addingTimeInterval(100))
+
+        XCTAssertEqual(engine.count(for: "finance"), 25)
+        XCTAssertEqual(engine.visibleGrapes(for: "finance"), 25)
+        XCTAssertEqual(engine.snapshot.branches, [VineBranch(id: "finance", count: 25)])
+        XCTAssertEqual(engine.harvestedGrapes(for: "finance"), 0)
+        XCTAssertNil(engine.snapshot.activeTheft)
+        XCTAssertNil(engine.nextDeadline)
+
+        let restored = VineEngine(storage: storage, now: engine.currentTime, inventoryMode: true)
+        XCTAssertEqual(restored.visibleGrapes(for: "finance"), 25)
+        XCTAssertEqual(restored.count(for: "finance"), 25)
+        restored.wake()
+        restored.calmDown()
+        restored.advance(to: restored.currentTime.addingTimeInterval(100))
+        XCTAssertNil(restored.snapshot.activeTheft)
+        XCTAssertEqual(restored.harvestedGrapes(for: "finance"), 0)
+        feed(restored, count: 1, category: "finance")
+        restored.advance(to: restored.currentTime.addingTimeInterval(100))
+        XCTAssertEqual(restored.snapshot.branches, [VineBranch(id: "finance", count: 26)])
+        XCTAssertEqual(restored.visibleGrapes(for: "finance"), 26)
+        XCTAssertEqual(restored.totalGrapes, 26)
+        XCTAssertNil(restored.snapshot.activeTheft)
+    }
 }

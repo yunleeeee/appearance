@@ -188,7 +188,18 @@ private actor ScriptedShellEngine: EngineServing {
     func createJob(path: String) async throws -> EngineJobAccepted {
         paths.append(path)
         guard !scripts.isEmpty, let first = scripts.first?.first else { throw URLError(.badServerResponse) }
-        active[first.jobID] = scripts.removeFirst()
+        // The service returns the actual submitted file identity. Reusing a
+        // placeholder path would make independent files appear to be repeats.
+        active[first.jobID] = scripts.removeFirst().map { job in
+            let result = job.result.map {
+                EngineClassificationResult(path: path, fileName: URL(fileURLWithPath: path).lastPathComponent,
+                                           status: $0.status, categoryID: $0.categoryID,
+                                           categoryLabel: $0.categoryLabel, confidence: $0.confidence,
+                                           matchedKeywords: $0.matchedKeywords, reason: $0.reason,
+                                           extractionChars: $0.extractionChars, deadlines: $0.deadlines)
+            }
+            return EngineJob(jobID: job.jobID, status: job.status, result: result, error: job.error)
+        }
         return EngineJobAccepted(jobID: first.jobID, status: "queued")
     }
     func job(id: String) async throws -> EngineJob {

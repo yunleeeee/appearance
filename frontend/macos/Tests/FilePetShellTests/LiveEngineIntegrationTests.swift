@@ -2,7 +2,7 @@ import Foundation
 import XCTest
 @testable import FilePetShell
 
-/// Opt in against a separately started engine whose --root is the bundled examples directory.
+/// Opt in against a separately started engine whose --root contains the bundled examples.
 /// The normal test suite stays independent of a running service and skips this case.
 @MainActor
 final class LiveEngineIntegrationTests: XCTestCase {
@@ -48,6 +48,7 @@ final class LiveEngineIntegrationTests: XCTestCase {
 
         // Exercise Python's actual --root guard through the same shell path.
         let outsideRoot = examples.deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent()
             .appendingPathComponent("README.md")
         if FileManager.default.fileExists(atPath: outsideRoot.path) {
             let outsideOriginal = try Data(contentsOf: outsideRoot)

@@ -1,0 +1,126 @@
+{
+  "version": "compact-garden-v1",
+  "kind": "visual-layout-specification",
+  "runtimeConsumed": false,
+  "description": "视觉实现参考配置；当前未被应用或预览运行时读取。所有尺寸为参考桌面的像素值。",
+  "referenceViewport": {
+    "width": 1555,
+    "height": 1012,
+    "origin": "top-left"
+  },
+  "scope": {
+    "visualOnly": true,
+    "overallLinearReductionTarget": [0.30, 0.40],
+    "anchor": "bottom-right",
+    "background": "transparent",
+    "addPanelsOrCards": false,
+    "addFeaturesOrAnimations": false
+  },
+  "flowers": {
+    "bounds": { "x": 1255, "y": 867, "width": 285, "height": 145 },
+    "rightInset": 15,
+    "bottomInset": 0,
+    "viewportWidthFraction": 0.1833,
+    "viewportHeightFraction": 0.1433,
+    "targetViewportWidthFraction": [0.15, 0.22],
+    "targetViewportHeightFraction": [0.12, 0.18],
+    "coordinates": "Each root is local to the flower bounds; y increases downward.",
+    "slotSemantics": "Visual slot IDs are placement placeholders only. They do not assign, combine, reorder or replace any DDL identity or lifecycle state.",
+    "slots": [
+      {
+        "visualSlotId": "visual-slot-left",
+        "root": { "x": 34, "y": 145 },
+        "visualScale": 0.82,
+        "leanDegrees": -5,
+        "maximumPlantHeight": 104,
+        "direction": "slightly outward"
+      },
+      {
+        "visualSlotId": "visual-slot-center",
+        "root": { "x": 126, "y": 145 },
+        "visualScale": 1.0,
+        "leanDegrees": 2,
+        "maximumPlantHeight": 145,
+        "direction": "upright with a slight natural bend"
+      },
+      {
+        "visualSlotId": "visual-slot-right",
+        "root": { "x": 246, "y": 145 },
+        "visualScale": 0.88,
+        "leanDegrees": 7,
+        "maximumPlantHeight": 116,
+        "direction": "gently nodding outward"
+      }
+    ],
+    "placementConstraints": [
+      "The three roots have unequal spacing; retain separate stems and individually readable silhouettes.",
+      "Layout scale and lean never choose a flower stage or change a stage timestamp.",
+      "Keep each flower head attached at its own calyx through all six source poses.",
+      "Do not move or rescale the flower layer when the grape layer appears or hides.",
+      "Use existing flower art and preserve berry petals, ivory edges, plum folds and gold centers."
+    ]
+  },
+  "grapeLayer": {
+    "maximumBounds": { "x": 1140, "y": 640, "width": 400, "height": 300 },
+    "displayedBounds": { "x": 1140, "y": 648, "width": 400, "height": 292 },
+    "rightInset": 15,
+    "bottomInset": 72,
+    "verticalAdjustment": "Raise the entire grape layer by 72 reference pixels without changing either layer's size or flower placement; assembled displayed bounds are 400 by 364 pixels.",
+    "visibility": "Follow the existing presentation state only.",
+    "hiddenState": {
+      "trellisOpacity": 0,
+      "grapeOpacity": 0,
+      "vineOpacity": 0,
+      "grapeLeafOpacity": 0,
+      "tendrilOpacity": 0,
+      "flowerOpacity": 1
+    },
+    "composition": [
+      "Shorten the horizontal support and vary grape hanging positions rather than forming one straight upper band.",
+      "Use a slender support near the right edge and a sparse descending vine to bridge the upper fruit and lower plants.",
+      "Allow irregular protruding leaves and open gaps; avoid a rectangular enclosure or an opaque silhouette.",
+      "Retain the existing purple, green and gold fruit appearance and all existing maturity and falling behavior."
+    ]
+  },
+  "decoration": {
+    "continuousGrassStrip": false,
+    "grassIslands": [
+      { "nearVisualSlotId": "visual-slot-left", "maximumBlades": 3 },
+      { "nearVisualSlotId": "visual-slot-center", "maximumBlades": 4 },
+      { "nearVisualSlotId": "visual-slot-right", "maximumBlades": 3 }
+    ],
+    "grassTreatment": "Small separated blades emerging at the screen bottom; transparent gaps remain between roots.",
+    "detailTreatment": "Reduce wood grain, leaf veins and repeated grass highlights. Preserve flower and fruit detail.",
+    "palette": {
+      "mutedGrass": "#677B58",
+      "grassShade": "#3E5544",
+      "leafMidtone": "#6F845A",
+      "leafHighlight": "#94A174",
+      "woodMidtone": "#8A6546",
+      "woodShade": "#594638",
+      "woodHighlight": "#AB8860"
+    },
+    "paletteNote": "Suggested secondary-element colors only; do not recolor flower heads or fruit.",
+    "outline": {
+      "style": "restrained local pixel edge",
+      "maximumWidthAtReference": 1,
+      "darkColor": "#283A31",
+      "lightColor": "#DED5B7",
+      "lightEdgePlacement": "Sparse selected edges only where needed against dark backgrounds.",
+      "globalGlow": false,
+      "largeCastShadow": false
+    }
+  },
+  "sourcePreservation": {
+    "frozenRelease": "design/releases/flower-v2.0-2026-10-30/",
+    "frozenReleaseMustRemainByteIdentical": true,
+    "preserveExistingDDLToFlowerMapping": true,
+    "preserveIndependentFlowerStateAndTimestamps": true,
+    "preserveSixStageLifecycle": ["含苞", "待放", "初绽", "盛放", "萎垂", "凋零"],
+    "preserveExistingPickingInteraction": true,
+    "preserveExistingGrapeMaturityAndFallMechanism": true,
+    "preserveBusinessAndAnimationTimingLogic": true,
+    "implementationBoundary": "Apply only rendering transforms, artwork simplification, local palette treatment and layer visibility. This specification does not create or claim runtime DDL, picking or maturity capabilities absent from an existing host.",
+    "coordinateConstraint": "If a host scales or moves fruit, transform its existing falling origin and hit target with the same visual-to-screen transform; do not alter mechanism timing or identity."
+  }
+}

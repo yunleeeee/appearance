@@ -28,6 +28,7 @@ public final class VineEngine {
     private var restoredMatureCategories: [String] = []
     private var isTheftPresentationEnabled = true
     private let storage: any VineStorage
+    private let inventoryMode: Bool
 
     private enum PhaseAction { case finishAppearance, beginDisappearance, finishDisappearance }
     private var phaseAction: PhaseAction?
@@ -36,8 +37,9 @@ public final class VineEngine {
     private var theftDeadline: Date?
     private var watchdogDeadline: Date?
 
-    public init(storage: any VineStorage = MemoryVineStorage(), now: Date = Date()) {
+    public init(storage: any VineStorage = MemoryVineStorage(), now: Date = Date(), inventoryMode: Bool = false) {
         self.storage = storage
+        self.inventoryMode = inventoryMode
         self.currentTime = now
         restore()
     }
@@ -92,7 +94,7 @@ public final class VineEngine {
         for category in categories {
             if !batchCategories.contains(category) { batchCategories.append(category) }
             if let index = recordedBranches.firstIndex(where: { $0.id == category }) {
-                if unharvestedCount(for: category) < Self.grapesPerBranchLimit { pendingGrowth.append(category) }
+                if inventoryMode || unharvestedCount(for: category) < Self.grapesPerBranchLimit { pendingGrowth.append(category) }
                 recordedBranches[index].count = Self.addCounts(recordedBranches[index].count, 1)
             } else {
                 recordedBranches.append(VineBranch(id: category, count: 1))
@@ -100,7 +102,7 @@ public final class VineEngine {
             }
         }
         persist(recordedBranches, forKey: Self.branchesKey)
-        for category in batchCategories where unharvestedCount(for: category) >= Self.grapesPerBranchLimit {
+        for category in batchCategories where !inventoryMode && unharvestedCount(for: category) >= Self.grapesPerBranchLimit {
             let alreadyInFlight = activeTheft?.category == category && activeTheft?.isPreview == false
             if !alreadyInFlight || unharvestedCount(for: category) >= Self.grapesPerBranchLimit * 2 {
                 armTheft(category)
@@ -206,7 +208,7 @@ public final class VineEngine {
             let category = pendingGrowth.removeFirst()
             let index = branches.firstIndex { $0.id == category }
             let previousCount = index.map { branches[$0].count } ?? 0
-            guard previousCount < Self.grapesPerBranchLimit else { continue }
+            guard inventoryMode || previousCount < Self.grapesPerBranchLimit else { continue }
             growthSequence += 1
             latestGrowth = VineGrowth(category: category, grapeIndex: previousCount, sequence: growthSequence)
             if let index { branches[index].count += 1 }
@@ -235,6 +237,7 @@ public final class VineEngine {
 
     @discardableResult
     private func planTheftIfPossible() -> Bool {
+        guard !inventoryMode else { return false }
         armedTheftCategories.removeAll { unharvestedCount(for: $0) < Self.grapesPerBranchLimit }
         guard isTheftPresentationEnabled, activeTheft == nil, !armedTheftCategories.isEmpty,
               !isTargeted, !isReceiving, growthDeadline == nil, isVisible else { return false }
@@ -275,7 +278,7 @@ public final class VineEngine {
 
     private func syncVisibleBranches() {
         branches = recordedBranches.map {
-            VineBranch(id: $0.id, count: min(Self.grapesPerBranchLimit, unharvestedCount(for: $0.id)))
+            VineBranch(id: $0.id, count: inventoryMode ? $0.count : min(Self.grapesPerBranchLimit, unharvestedCount(for: $0.id)))
         }
         refreshFullState()
     }
@@ -312,7 +315,7 @@ public final class VineEngine {
             }
         } catch { persistenceError = error.localizedDescription }
         syncVisibleBranches()
-        restoredMatureCategories = branches.filter(\.isMature).map(\.id)
+        restoredMatureCategories = inventoryMode ? [] : branches.filter(\.isMature).map(\.id)
     }
 
     private func cancelPhase() { phaseDeadline = nil; phaseAction = nil }

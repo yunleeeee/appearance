@@ -1,17 +1,20 @@
 #!/bin/zsh
 set -euo pipefail
 FILEPET_SHELL_ROOT=${0:A:h}
-FILEPET_REPO_ROOT=${FILEPET_SHELL_ROOT:h:h}
-FILEPET_BACKEND_ROOT="$FILEPET_REPO_ROOT/backend"
-FILEPET_PYTHON="$FILEPET_REPO_ROOT/.venv/bin/python"
+FILEPET_ENGINE_ROOT=${FILEPET_ENGINE_ROOT:-${FILEPET_SHELL_ROOT:h:h:h}/filepet-engine}
 FILEPET_INPUT_ROOT=""
+FILEPET_USE_EXAMPLES=0
 FILEPET_PORT=8765
 FILEPET_OPEN_APP=1
 FILEPET_ENGINE_PID=""
 
 usage() {
-  print "用法：./run-dev.sh --root <允许引擎读取的文件夹> [--port 8765] [--engine-only]"
+  print "日常使用可直接双击 FilePetShell.app，App 会自动启动并连接分类核心。"
+  print "以下为自定义授权目录或外部核心的开发启动方式。"
+  print "用法：./run-dev.sh --root <允许引擎读取的文件夹> [--port 8765] [--engine-only] [--engine-root <核心仓库>]"
   print "示例：./run-dev.sh --examples"
+  print "核心默认使用相邻的 filepet-engine；也可通过 FILEPET_ENGINE_ROOT 或 --engine-root 指定。"
+  print -r -- "--examples 允许读取核心 backend/，覆盖普通分类与 DDL 示例。"
   print "Ctrl+C 只停止本脚本启动的分类引擎；不会移动或删除输入文件。"
 }
 
@@ -20,10 +23,15 @@ while (( $# )); do
     --root)
       (( $# >= 2 )) || { usage; exit 2; }
       FILEPET_INPUT_ROOT="$2"
+      FILEPET_USE_EXAMPLES=0
       shift 2 ;;
     --examples)
-      FILEPET_INPUT_ROOT="$FILEPET_BACKEND_ROOT/scripts/examples"
+      FILEPET_USE_EXAMPLES=1
       shift ;;
+    --engine-root)
+      (( $# >= 2 )) || { usage; exit 2; }
+      FILEPET_ENGINE_ROOT="$2"
+      shift 2 ;;
     --port)
       (( $# >= 2 )) || { usage; exit 2; }
       FILEPET_PORT="$2"
@@ -41,6 +49,25 @@ while (( $# )); do
   esac
 done
 
+# LaunchServices does not replace the arguments of an already running app.
+# Refuse a misleading "reconnect" to a different external service.
+if (( FILEPET_OPEN_APP )) && pgrep -x FilePetShell >/dev/null; then
+  print -u2 "葡萄藤已运行，并会自动管理分类核心。"
+  print -u2 "切换到脚本的自定义目录或外部核心前，请先从菜单栏退出 App；仅启动外部服务可加 --engine-only。"
+  exit 2
+fi
+
+FILEPET_ENGINE_ROOT=${FILEPET_ENGINE_ROOT:A}
+FILEPET_BACKEND_ROOT="$FILEPET_ENGINE_ROOT/backend"
+FILEPET_PYTHON="$FILEPET_ENGINE_ROOT/.venv/bin/python"
+if [[ ! -d "$FILEPET_BACKEND_ROOT/filepet" ]]; then
+  print -u2 "未找到 FilePet 核心：$FILEPET_BACKEND_ROOT"
+  print -u2 "请将核心放在相邻的 filepet-engine，或通过 FILEPET_ENGINE_ROOT / --engine-root 指定核心仓库。"
+  exit 2
+fi
+if (( FILEPET_USE_EXAMPLES )); then
+  FILEPET_INPUT_ROOT="$FILEPET_BACKEND_ROOT"
+fi
 if [[ -z "$FILEPET_INPUT_ROOT" ]]; then
   usage
   print -u2 "请显式指定 --root，或用 --examples 选择项目示例。"
@@ -52,7 +79,7 @@ if [[ "$FILEPET_PORT" != <-> ]] || (( FILEPET_PORT < 1 || FILEPET_PORT > 65535 )
 fi
 if [[ ! -x "$FILEPET_PYTHON" ]]; then
   print -u2 "未找到项目 Python 环境：$FILEPET_PYTHON"
-  print -u2 "请先按照 backend/README.md 安装分类引擎依赖。"
+  print -u2 "请先按照 $FILEPET_BACKEND_ROOT/README.md 安装分类引擎依赖。"
   exit 2
 fi
 if ! FILEPET_INPUT_ROOT=$("$FILEPET_PYTHON" -c '
@@ -86,7 +113,7 @@ if /usr/sbin/lsof -nP -iTCP:"$FILEPET_PORT" -sTCP:LISTEN -t >/dev/null 2>&1; the
 fi
 
 if (( FILEPET_OPEN_APP )); then
-  "$FILEPET_SHELL_ROOT/build-app.sh"
+  FILEPET_ENGINE_ROOT="$FILEPET_ENGINE_ROOT" "$FILEPET_SHELL_ROOT/build-app.sh"
 fi
 mkdir -p "$FILEPET_SHELL_ROOT/build"
 FILEPET_ENGINE_LOG="$FILEPET_SHELL_ROOT/build/engine.log"

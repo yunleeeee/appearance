@@ -3,12 +3,13 @@ import Combine
 import Foundation
 
 struct ShellFileResult: Identifiable, Equatable {
-    enum Outcome: Equatable { case classified, needsReview, failed }
+    enum Outcome: Equatable { case classified, deadline, needsReview, failed }
     let id = UUID()
     let fileName: String
     let outcome: Outcome
     let categoryLabel: String?
     let detail: String
+    var reviewID: String? = nil
 }
 
 /// UI orchestration only: the service owns every classification decision.
@@ -22,61 +23,125 @@ final class ShellStore: ObservableObject {
     @Published var petVisible = true
 
     let vine: VineModel
-    private let client: (any EngineServing)?
+    let garden: DeadlineGarden
+    let reviewInbox: FileReviewInbox
+    var onShowPendingReviews: (() -> Void)?
+    private let defaults: UserDefaults
+    private var classifiedPaths: Set<String>
+    private let pathsKey = "filepet.shell.inventory.paths.v1"
+    private var client: (any EngineServing)?
+    private let runtime: (any EngineRuntimeManaging)?
+    private let usesInjectedClient: Bool
+    private var managedEndpoint: URL?
     private let configurationError: String?
     private let pollInterval: UInt64
     private let jobTimeout: TimeInterval
     private var work: Task<Void, Never>?
     private var connectionCheck: Task<Void, Never>?
+    private var connectionID = UUID()
+    private var reconnectTimer: Timer?
     private var runID = UUID()
     private(set) var categoryLabels: [String: String] = [:]
 
-    init(client: (any EngineServing)? = nil, defaults: UserDefaults = .standard,
+    init(client: (any EngineServing)? = nil, runtime: (any EngineRuntimeManaging)? = nil,
+         defaults: UserDefaults = .standard,
          arguments: [String] = CommandLine.arguments,
          pollInterval: UInt64 = 250_000_000, jobTimeout: TimeInterval = 90) {
+        if defaults === UserDefaults.standard {
+            ShellPreferencesMigration.restoreLegacySandboxValues(into: defaults)
+        }
         vine = VineModel(defaults: defaults)
+        garden = DeadlineGarden(defaults: defaults)
+        reviewInbox = FileReviewInbox(defaults: defaults)
+        self.defaults = defaults
+        classifiedPaths = Set(defaults.stringArray(forKey: "filepet.shell.inventory.paths.v1") ?? [])
+        categoryLabels = defaults.dictionary(forKey: "filepet.shell.inventory.labels.v1") as? [String: String] ?? [:]
+        vine.setCategoryLabels(categoryLabels)
         self.pollInterval = pollInterval
         self.jobTimeout = jobTimeout
-        if let client {
-            self.client = client
-            configurationError = nil
-        } else {
+        usesInjectedClient = client != nil
+        if arguments.contains("--engine-url") {
+            // An explicit endpoint is external mode: never start or stop its service.
+            self.runtime = nil
             do {
-                var endpoint = EngineClient.defaultBaseURL
-                if let index = arguments.firstIndex(of: "--engine-url") {
-                    guard arguments.indices.contains(index + 1),
-                          let supplied = URL(string: arguments[index + 1]) else {
-                        throw EngineClientError.invalidEndpoint
-                    }
-                    endpoint = supplied
+                guard let index = arguments.firstIndex(of: "--engine-url"),
+                      arguments.indices.contains(index + 1),
+                      let endpoint = URL(string: arguments[index + 1]) else {
+                    throw EngineClientError.invalidEndpoint
                 }
-                self.client = try EngineClient(baseURL: endpoint)
+                let external = try EngineClient(baseURL: endpoint)
+                self.client = client ?? external
                 configurationError = nil
             } catch {
                 self.client = nil
                 configurationError = error.localizedDescription
             }
+        } else if let client {
+            self.client = client
+            self.runtime = runtime
+            configurationError = nil
+        } else {
+            self.client = nil
+            self.runtime = runtime ?? LocalEngineRuntime()
+            configurationError = nil
+            connectionStatus = "分类引擎：正在准备"
         }
     }
 
-    func refreshConnection() {
-        guard !isBusy else { return }
+    /// Called once when the app opens. Recovery only manages the app's own core.
+    func startConnectionMonitoring() {
+        refreshConnection()
+        guard runtime != nil, reconnectTimer == nil else { return }
+        let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshConnection(quietly: true) }
+        }
+        timer.tolerance = 0.5
+        reconnectTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    func refreshConnection(quietly: Bool = false) {
+        guard !isBusy, !quietly || connectionCheck == nil else { return }
         connectionCheck?.cancel()
+        connectionID = UUID()
+        let attemptID = connectionID
+        let wasConnected = connectionStatus.hasPrefix("分类引擎：已连接")
+        if !quietly || !wasConnected {
+            status = runtime == nil ? "正在连接分类引擎…" : "正在准备分类引擎…"
+        }
         connectionCheck = Task { [weak self] in
             guard let self else { return }
+            defer { if self.connectionID == attemptID { self.connectionCheck = nil } }
             do {
                 try await self.connect()
-                self.status = "分类引擎已连接，把文件投给葡萄藤吧"
+                try Task.checkCancellation()
+                guard self.connectionID == attemptID else { return }
+                if !quietly || !wasConnected {
+                    self.status = "分类引擎已连接，把文件投给葡萄藤吧"
+                }
             } catch is CancellationError {
             } catch {
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, self.connectionID == attemptID else { return }
                 self.connectionStatus = "分类引擎：未连接"
                 self.status = self.friendlyError(error)
             }
         }
     }
 
+    func waitUntilConnected() async { await connectionCheck?.value }
+
     private func connect() async throws {
+        if let runtime {
+            if !connectionStatus.hasPrefix("分类引擎：已连接") {
+                connectionStatus = "分类引擎：正在启动…"
+            }
+            let endpoint = try await runtime.ensureRunning()
+            try Task.checkCancellation()
+            if !usesInjectedClient, client == nil || managedEndpoint != endpoint {
+                client = try EngineClient(baseURL: endpoint)
+                managedEndpoint = endpoint
+            }
+        }
         guard let client else {
             throw ShellError.message(configurationError ?? "分类引擎未配置")
         }
@@ -86,6 +151,7 @@ final class ShellStore: ObservableObject {
         try Task.checkCancellation()
         categoryLabels = Dictionary(categories.map { ($0.id, $0.label) }, uniquingKeysWith: { _, new in new })
         vine.setCategoryLabels(categoryLabels)
+        defaults.set(categoryLabels, forKey: "filepet.shell.inventory.labels.v1")
         connectionStatus = "分类引擎：已连接（\(health.version)）"
     }
 
@@ -93,7 +159,7 @@ final class ShellStore: ObservableObject {
         guard !isBusy else { return }
         let panel = NSOpenPanel()
         panel.title = "选择要分类的文件"
-        panel.message = "请选择分类引擎已授权目录中的文件"
+        panel.message = "选择要投喂的文件，App 会自动连接分类核心"
         panel.prompt = "开始分类"
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
@@ -108,6 +174,8 @@ final class ShellStore: ObservableObject {
         let files = urls.filter { $0.isFileURL && seen.insert($0.standardizedFileURL.path).inserted }
         guard !files.isEmpty else { return }
         connectionCheck?.cancel()
+        connectionID = UUID()
+        connectionCheck = nil
         runID = UUID()
         let batchID = runID
         isBusy = true
@@ -124,10 +192,8 @@ final class ShellStore: ObservableObject {
     func waitUntilIdle() async { await work?.value }
 
     private func process(_ files: [URL], batchID: UUID) async {
-        var successfulCategories: [String] = []
         defer {
             if runID == batchID {
-                vine.recordSuccesses(categories: successfulCategories)
                 isBusy = false
                 vine.scheduleSleep()
             }
@@ -144,17 +210,42 @@ final class ShellStore: ObservableObject {
                     let job = try await finishedJob(path: url.path)
                     try Task.checkCancellation()
                     guard runID == batchID else { return }
-                    if job.status == "completed", let result = job.result,
+                    if ["completed", "needs_review"].contains(job.status), let result = job.result,
+                       !result.deadlines.isEmpty {
+                        let knownIDs = Set(garden.deadlines.map(\.id))
+                        let pending = result.deadlines.filter { $0.requiresConfirmation && !knownIDs.contains($0.id) }
+                        let added = garden.feed(result.deadlines.filter { !$0.requiresConfirmation })
+                        if !pending.isEmpty {
+                            reviewInbox.enqueue(result: result, candidates: pending)
+                            let detail = "识别到 \(pending.count) 个需核对的 DDL；请在“待确认事项”中确认并生成花朵"
+                            results.append(ShellFileResult(fileName: url.lastPathComponent, outcome: .needsReview,
+                                categoryLabel: nil, detail: detail,
+                                reviewID: URL(fileURLWithPath: result.path).standardizedFileURL.path))
+                        } else {
+                            reviewInbox.remove(id: URL(fileURLWithPath: result.path).standardizedFileURL.path)
+                            let detail = added > 0 ? "新增 \(added) 个 DDL；当前 \(garden.visibleDeadlines.count) 朵花，\(garden.queuedCount) 个排队" : "DDL 已投喂或已收获，无需重复添加"
+                            results.append(ShellFileResult(fileName: url.lastPathComponent, outcome: .deadline,
+                                                           categoryLabel: nil, detail: detail))
+                        }
+                    } else if job.status == "completed", let result = job.result,
                        result.status == "classified", let category = result.categoryID, !category.isEmpty {
                         let label = result.categoryLabel ?? categoryLabels[category] ?? category
                         categoryLabels[category] = label
                         vine.setCategoryLabels(categoryLabels)
-                        successfulCategories.append(category)
+                        defaults.set(categoryLabels, forKey: "filepet.shell.inventory.labels.v1")
+                        let identity = URL(fileURLWithPath: result.path).standardizedFileURL.path
+                        let isNew = classifiedPaths.insert(identity).inserted
+                        if isNew {
+                            vine.recordSuccess(category: category)
+                            defaults.set(classifiedPaths.sorted(), forKey: pathsKey)
+                        }
                         results.append(ShellFileResult(fileName: url.lastPathComponent, outcome: .classified,
-                                                       categoryLabel: label, detail: result.reason))
+                                                       categoryLabel: label, detail: isNew ? result.reason : "这个文件已分类，葡萄数量保持不变"))
                     } else if job.status == "needs_review" {
+                        if let result = job.result { reviewInbox.enqueue(result: result) }
                         results.append(ShellFileResult(fileName: url.lastPathComponent, outcome: .needsReview,
-                                                       categoryLabel: nil, detail: job.result?.reason ?? "需要你确认分类"))
+                            categoryLabel: nil, detail: job.result?.reason ?? "需要你确认分类",
+                            reviewID: job.result.map { URL(fileURLWithPath: $0.path).standardizedFileURL.path }))
                     } else {
                         results.append(ShellFileResult(fileName: url.lastPathComponent, outcome: .failed,
                                                        categoryLabel: nil, detail: job.error?.detail ?? "分类引擎未返回有效结果"))
@@ -169,7 +260,10 @@ final class ShellStore: ObservableObject {
             let confirmed = results.filter { $0.outcome == .classified }.count
             let review = results.filter { $0.outcome == .needsReview }.count
             let failed = results.filter { $0.outcome == .failed }.count
+            let deadlineFiles = results.filter { $0.outcome == .deadline }.count
             status = "分类完成：\(confirmed) 个已识别，\(review) 个待确认，\(failed) 个失败"
+            if deadlineFiles > 0 { status += "；\(deadlineFiles) 份 DDL，\(garden.visibleDeadlines.count) 朵花，\(garden.queuedCount) 个排队" }
+            if review > 0, !reviewInbox.items.isEmpty { onShowPendingReviews?() }
         } catch is CancellationError {
             if runID == batchID { status = "已停止等待分类结果" }
         } catch {
@@ -182,6 +276,64 @@ final class ShellStore: ObservableObject {
             status = friendlyError(error)
             results = files.map { ShellFileResult(fileName: $0.lastPathComponent, outcome: .failed,
                                                   categoryLabel: nil, detail: status) }
+        }
+    }
+
+    @discardableResult
+    func confirmDeadline(reviewID: String, candidateID: String?, title: String, project: String,
+                         dueDate: String, dueTime: String?) -> String? {
+        guard let review = reviewInbox.items.first(where: { $0.id == reviewID }) else { return "这项待确认记录已处理。" }
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let project = project.trimmingCharacters(in: .whitespacesAndNewlines)
+        let date = dueDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        let time = dueTime?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let optionalTime = time.flatMap { $0.isEmpty ? nil : $0 }
+        if let error = DeadlineInput.validationError(title: title, project: project, dueDate: date, dueTime: optionalTime) { return error }
+        let candidate = candidateID.flatMap { id in review.candidates.first { $0.id == id } }
+        if candidateID != nil, candidate == nil { return "这条候选 DDL 已处理，请选择其他事项。" }
+        let id = candidate?.id ?? DeadlineInput.manualID(path: review.path, title: title, dueDate: date, dueTime: optionalTime)
+        let confirmed = EngineDeadline(id: id, title: title, project: project, dueDate: date,
+            dueTime: optionalTime, yearInferred: false, evidence: candidate?.evidence ?? "用户补充：" + title,
+            signal: "user_confirmed")
+        garden.feed([confirmed])
+        if let error = garden.persistenceError { return error }
+        reviewInbox.resolveCandidate(reviewID: reviewID, candidateID: candidateID)
+        status = "DDL 已确认；当前 \(garden.visibleDeadlines.count) 朵花，\(garden.queuedCount) 个排队"
+        updateReviewedResult(review, outcome: .deadline, detail: status)
+        return nil
+    }
+
+    @discardableResult
+    func confirmCategory(reviewID: String, categoryID: String) -> String? {
+        guard let review = reviewInbox.items.first(where: { $0.id == reviewID }) else { return "这项待确认记录已处理。" }
+        guard let label = categoryLabels[categoryID], !label.isEmpty else { return "请选择核心提供的分类。" }
+        if classifiedPaths.insert(review.path).inserted {
+            vine.beginReceiving()
+            vine.recordSuccess(category: categoryID)
+            vine.scheduleSleep()
+            defaults.set(classifiedPaths.sorted(), forKey: pathsKey)
+        }
+        reviewInbox.remove(id: reviewID)
+        status = "已确认为“\(label)”，葡萄计数已更新"
+        updateReviewedResult(review, outcome: .classified, detail: status, categoryLabel: label)
+        return nil
+    }
+
+    func dismissReview(id: String) {
+        reviewInbox.remove(id: id)
+        status = "已忽略这项待确认记录"
+    }
+
+    private func updateReviewedResult(_ review: PendingFileReview, outcome: ShellFileResult.Outcome,
+                                      detail: String, categoryLabel: String? = nil) {
+        let remains = reviewInbox.items.first { $0.id == review.id }
+        results = results.map { item in
+            guard item.reviewID == review.id else { return item }
+            return ShellFileResult(fileName: item.fileName,
+                outcome: remains == nil ? outcome : .needsReview,
+                categoryLabel: categoryLabel,
+                detail: remains == nil ? detail : "还有 \(remains?.candidates.count ?? 0) 条 DDL 待确认",
+                reviewID: review.id)
         }
     }
 
@@ -205,8 +357,13 @@ final class ShellStore: ObservableObject {
     func stop() {
         // The service has no cancellation endpoint. Stop UI polling and commit
         // only results already received; no claim that server work was undone.
+        connectionID = UUID()
         connectionCheck?.cancel()
+        connectionCheck = nil
         work?.cancel()
+        reconnectTimer?.invalidate()
+        reconnectTimer = nil
+        runtime?.stop()
     }
 
     func showResults() {
@@ -216,20 +373,24 @@ final class ShellStore: ObservableObject {
             let label: String
             switch item.outcome {
             case .classified: label = item.categoryLabel ?? "已识别"
+            case .deadline: label = "DDL 花朵"
             case .needsReview: label = "待确认"
             case .failed: label = "失败"
             }
             return "\(item.fileName) → \(label)\n\(item.detail)"
         }.joined(separator: "\n\n")
         alert.addButton(withTitle: "好")
+        if !reviewInbox.items.isEmpty { alert.addButton(withTitle: "处理待确认…") }
         NSApp.activate(ignoringOtherApps: true)
-        alert.runModal()
+        if alert.runModal() == .alertSecondButtonReturn { onShowPendingReviews?() }
     }
 
     private func friendlyError(_ error: Error) -> String {
         if let urlError = error as? URLError,
            [.cannotConnectToHost, .cannotFindHost, .networkConnectionLost, .timedOut].contains(urlError.code) {
-            return "无法连接本机分类引擎，请先启动引擎；动画预览仍可使用"
+            return runtime == nil
+                ? "无法连接本机分类引擎，请检查外部服务是否已启动"
+                : "分类引擎暂时断开，App 会自动重新连接，请稍后重试"
         }
         return error.localizedDescription
     }

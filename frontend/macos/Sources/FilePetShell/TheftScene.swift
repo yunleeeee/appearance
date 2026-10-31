@@ -11,12 +11,15 @@ struct TheftScene: View {
     let origin: CGPoint
     let elapsed: TimeInterval
     var reducedMotion = false
+    var grapeVisualScale = 0.60
 
     var body: some View {
         GeometryReader { geometry in
             let state = TheftChoreography.state(at: elapsed, size: CoreSize(width: Double(geometry.size.width), height: Double(geometry.size.height)),
                                                 origin: CorePoint(x: Double(origin.x), y: Double(origin.y)),
                                                 reducedMotion: reducedMotion)
+            let visualCenter = CompactGardenLayout.grapeCenter(for: state, elapsed: elapsed,
+                reducedMotion: reducedMotion, visualScale: grapeVisualScale)
             ZStack(alignment: .topLeading) {
                 Canvas { context, _ in
                     // A short floor puff marks the feet taking the load. It
@@ -45,8 +48,8 @@ struct TheftScene: View {
                     }
                     if elapsed > 0.98 && elapsed < 2.06 && !reducedMotion {
                         for i in 0..<3 {
-                            let x = CGFloat(state.grapeCenter.x) - 18 + CGFloat(i) * 18
-                            let y = CGFloat(state.grapeCenter.y) - 59 - CGFloat(i % 2) * 9
+                            let x = CGFloat(visualCenter.x) - 18 + CGFloat(i) * 18
+                            let y = CGFloat(visualCenter.y) - 59 - CGFloat(i % 2) * 9
                             var streak = Path()
                             streak.move(to: CGPoint(x: x, y: y))
                             streak.addLine(to: CGPoint(x: x, y: y - 16))
@@ -56,22 +59,12 @@ struct TheftScene: View {
                     }
                 }
 
-                ZStack(alignment: .topLeading) {
-                    Canvas { context, _ in
-                        var stem = Path()
-                        stem.move(to: CGPoint(x: 32, y: -7))
-                        stem.addQuadCurve(to: CGPoint(x: 31, y: 10), control: CGPoint(x: 36, y: -1))
-                        context.stroke(stem, with: .color(Color(red: 0.30, green: 0.24, blue: 0.11)),
-                                       style: StrokeStyle(lineWidth: 3.4, lineCap: .round))
-                        context.stroke(stem, with: .color(Color(red: 0.62, green: 0.57, blue: 0.23)),
-                                       style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                    }
-                    GrapeClusterView(branch: VineBranch(id: category, count: 12), growth: nil, reduceMotion: true)
-                }
+                GrapeClusterView(branch: VineBranch(id: category, count: 12), growth: nil, reduceMotion: true)
                 .frame(width: 64, height: 88)
-                .scaleEffect(x: CGFloat(state.grapeScale.width), y: CGFloat(state.grapeScale.height))
+                .scaleEffect(x: CGFloat(state.grapeScale.width * grapeVisualScale),
+                             y: CGFloat(state.grapeScale.height * grapeVisualScale))
                 .rotationEffect(.degrees(state.grapeRotation))
-                .position(state.grapeCenter.cgPoint)
+                .position(visualCenter.cgPoint)
                 .opacity(state.grapeOpacity)
 
                 ThievingMouseView(elapsed: state.mouseElapsed, reducedMotion: reducedMotion, facingRight: true)

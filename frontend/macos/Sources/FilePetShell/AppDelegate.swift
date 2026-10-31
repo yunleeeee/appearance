@@ -11,19 +11,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var dropInteraction: VineDropInteractionController?
     private var theftOverlay: TheftOverlayController?
+    private var flowerController: DeadlineFlowerController?
+    private var reviewWindowController: ReviewWindowController?
     private var petVisible = true
     private var cancellables = Set<AnyCancellable>()
     private weak var engineMenuItem: NSMenuItem?
     private weak var summaryMenuItem: NSMenuItem?
     private weak var classifyMenuItem: NSMenuItem?
+    private weak var flowerMenuItem: NSMenuItem?
+    private weak var applicationEngineMenuItem: NSMenuItem?
+    private weak var applicationSummaryMenuItem: NSMenuItem?
+    private weak var reviewMenuItem: NSMenuItem?
+    private weak var applicationReviewMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        store.onShowPendingReviews = { [weak self] in self?.showPendingReviews() }
         createVineWindow()
+        flowerController = DeadlineFlowerController(garden: store.garden, screenFrame: { [weak self] in
+            // DDL confirmation may occur on another display. Keep flowers with
+            // the trellis instead of following the current main window.
+            self?.vinePanel?.screen?.frame ?? NSScreen.screens.first?.frame
+                ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        }) { [weak self] files in
+            self?.store.classifyFiles(files)
+        }
         createMenuBar()
         createApplicationMenu()
         theftOverlay = TheftOverlayController(model: store.vine)
-        store.refreshConnection()
+        store.startConnectionMonitoring()
         store.$status.sink { [weak self] text in
             self?.statusItem?.button?.toolTip = text
         }.store(in: &cancellables)
@@ -107,13 +123,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     guard let panel = self?.vinePanel else { return }
                     self?.theftOverlay?.dismiss()
                     self?.store.vine.setTheftPresentationEnabled(false)
-                    self?.positionPanel(panel, width: width, height: height, force: false)
+                    self?.positionPanel(panel, width: width, height: height, force: true)
+                    self?.flowerController?.reposition()
                     self?.store.vine.setTheftPresentationEnabled(self?.petVisible ?? false)
                 }
             }
     }
 
-    /// 主屏右上角，藤蔓从屏幕右缘伸出，位于菜单栏下方。
+    /// 主屏右下角；花层留在屏幕底部，葡萄层位于它上方。
     private func positionPanel(_ panel: NSPanel, width: CGFloat, height: CGFloat, force: Bool) {
         let frame = panel.frame
 
@@ -124,17 +141,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if onScreen { return }
         }
 
-        let area = NSScreen.main?.visibleFrame ?? NSRect(
+        let area = NSScreen.main?.frame ?? NSRect(
             x: 0, y: 0, width: 1440, height: 900
         )
         panel.setFrameOrigin(NSPoint(
-            x: area.maxX - width,
-            y: area.maxY - height - 16
+            x: area.maxX - width - CGFloat(CompactGardenLayout.rightInset),
+            y: area.minY + CGFloat(CompactGardenLayout.bottomInset)
         ))
     }
 
     private func setPanelVisible(_ visible: Bool) {
         petVisible = visible
+        flowerController?.setVisible(visible)
         store.vine.setTheftPresentationEnabled(visible)
         if visible {
             vinePanel?.orderFrontRegardless()
@@ -151,11 +169,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let main = NSMenu()
         let item = NSMenuItem()
         let commands = NSMenu(title: "葡萄藤")
-        let flowers = NSMenuItem(title: "六阶段花朵设计预览 · 常驻", action: nil, keyEquivalent: "")
+        commands.delegate = self
+        commands.autoenablesItems = false
+        let engine = NSMenuItem(title: store.connectionStatus, action: nil, keyEquivalent: "")
+        engine.isEnabled = false
+        commands.addItem(engine)
+        applicationEngineMenuItem = engine
+        let summary = NSMenuItem(title: store.status, action: nil, keyEquivalent: "")
+        summary.isEnabled = false
+        commands.addItem(summary)
+        applicationSummaryMenuItem = summary
+        commands.addItem(.separator())
+        let flowers = NSMenuItem(title: "DDL 花朵：悬停查看，点击收获", action: nil, keyEquivalent: "")
         commands.addItem(flowers)
+        let gardenPreview = NSMenuItem(title: "预览葡萄架", action: #selector(previewVine), keyEquivalent: "")
+        gardenPreview.target = self
+        commands.addItem(gardenPreview)
         let choose = NSMenuItem(title: "选择文件分类…", action: #selector(chooseFiles), keyEquivalent: "o")
         choose.target = self
         commands.addItem(choose)
+        let reviews = NSMenuItem(title: pendingReviewMenuTitle, action: #selector(showPendingReviews), keyEquivalent: "")
+        reviews.target = self
+        commands.addItem(reviews)
+        applicationReviewMenuItem = reviews
         let results = NSMenuItem(title: "查看最近分类结果…", action: #selector(showResults), keyEquivalent: "")
         results.target = self
         commands.addItem(results)
@@ -193,14 +229,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         summary.isEnabled = false
         menu.addItem(summary)
         summaryMenuItem = summary
-        let flowers = NSMenuItem(title: "六阶段花朵设计预览 · 常驻", action: nil, keyEquivalent: "")
+        let flowers = NSMenuItem(title: "DDL 花朵：悬停查看，点击收获", action: nil, keyEquivalent: "")
         flowers.isEnabled = false
         menu.addItem(flowers)
+        flowerMenuItem = flowers
         menu.addItem(.separator())
         let choose = NSMenuItem(title: "选择文件分类…", action: #selector(chooseFiles), keyEquivalent: "")
         choose.target = self
         menu.addItem(choose)
         classifyMenuItem = choose
+        let reviews = NSMenuItem(title: pendingReviewMenuTitle, action: #selector(showPendingReviews), keyEquivalent: "")
+        reviews.target = self
+        menu.addItem(reviews)
+        reviewMenuItem = reviews
         let reconnect = NSMenuItem(title: "重新连接分类引擎", action: #selector(reconnectEngine), keyEquivalent: "")
         reconnect.target = self
         menu.addItem(reconnect)
@@ -218,7 +259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(toggle)
 
         let preview = NSMenuItem(
-            title: "预览葡萄藤",
+            title: "预览葡萄架",
             action: #selector(previewVine),
             keyEquivalent: ""
         )
@@ -247,16 +288,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem = item
     }
 
+    private var pendingReviewMenuTitle: String {
+        let count = store.reviewInbox.items.reduce(0) { $0 + max(1, $1.candidates.count) }
+        return "待确认事项（\(count)）…"
+    }
+
     func menuNeedsUpdate(_ menu: NSMenu) {
+        reviewMenuItem?.title = pendingReviewMenuTitle
+        applicationReviewMenuItem?.title = pendingReviewMenuTitle
+        applicationEngineMenuItem?.title = store.connectionStatus
+        applicationSummaryMenuItem?.title = store.status
         engineMenuItem?.title = store.connectionStatus
         summaryMenuItem?.title = store.status
         classifyMenuItem?.isEnabled = !store.isBusy
+        flowerMenuItem?.title = "DDL 花朵：\(store.garden.visibleDeadlines.count) 朵，\(store.garden.queuedCount) 项排队 · 点击收获"
     }
 
     @objc private func chooseFiles() { store.chooseFiles() }
     func chooseFilesFromMenu() { store.chooseFiles() }
     @objc private func reconnectEngine() { store.refreshConnection() }
     @objc private func showResults() { store.showResults() }
+    @objc private func showPendingReviews() {
+        if reviewWindowController == nil { reviewWindowController = ReviewWindowController(store: store) }
+        reviewWindowController?.show()
+    }
 
     @objc private func toggleVine() {
         store.petVisible.toggle()
@@ -279,6 +334,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         store.stop()
         dropInteraction?.stop()
         theftOverlay?.dismiss()
+        flowerController?.stop()
+        reviewWindowController?.close()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(

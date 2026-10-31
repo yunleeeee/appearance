@@ -1,0 +1,290 @@
+{
+  "date": "2026-10-30",
+  "kind": "static-visual-verification",
+  "referenceViewport": [
+    1555,
+    1012
+  ],
+  "flowerLayerIdenticalAcrossStatesAndBackgrounds": true,
+  "flowerLayerSHA256": "ab4e8cc922d3a40eb21b210d2711a1f53dc63b1106c4ad2215b8526f61b2181e",
+  "noProductControls": true,
+  "consoleAndResourceErrors": [],
+  "views": [
+    {
+      "background": "desktop",
+      "state": "all",
+      "file": "desktop-all.png",
+      "flowerRect": {
+        "x": 1253,
+        "y": 864,
+        "width": 289,
+        "height": 148,
+        "top": 864,
+        "right": 1542,
+        "bottom": 1012,
+        "left": 1253
+      },
+      "trellisRect": {
+        "x": 1140,
+        "y": 648,
+        "width": 400,
+        "height": 292,
+        "top": 648,
+        "right": 1540,
+        "bottom": 940,
+        "left": 1140
+      },
+      "trellisDisplay": "block"
+    },
+    {
+      "background": "desktop",
+      "state": "flowers",
+      "file": "desktop-flowers.png",
+      "flowerRect": {
+        "x": 1253,
+        "y": 864,
+        "width": 289,
+        "height": 148,
+        "top": 864,
+        "right": 1542,
+        "bottom": 1012,
+        "left": 1253
+      },
+      "trellisRect": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0,
+        "left": 0
+      },
+      "trellisDisplay": "none"
+    },
+    {
+      "background": "complex",
+      "state": "all",
+      "file": "complex-all.png",
+      "flowerRect": {
+        "x": 1253,
+        "y": 864,
+        "width": 289,
+        "height": 148,
+        "top": 864,
+        "right": 1542,
+        "bottom": 1012,
+        "left": 1253
+      },
+      "trellisRect": {
+        "x": 1140,
+        "y": 648,
+        "width": 400,
+        "height": 292,
+        "top": 648,
+        "right": 1540,
+        "bottom": 940,
+        "left": 1140
+      },
+      "trellisDisplay": "block"
+    },
+    {
+      "background": "complex",
+      "state": "flowers",
+      "file": "complex-flowers.png",
+      "flowerRect": {
+        "x": 1253,
+        "y": 864,
+        "width": 289,
+        "height": 148,
+        "top": 864,
+        "right": 1542,
+        "bottom": 1012,
+        "left": 1253
+      },
+      "trellisRect": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0,
+        "left": 0
+      },
+      "trellisDisplay": "none"
+    },
+    {
+      "background": "light",
+      "state": "all",
+      "file": "light-all.png",
+      "flowerRect": {
+        "x": 1253,
+        "y": 864,
+        "width": 289,
+        "height": 148,
+        "top": 864,
+        "right": 1542,
+        "bottom": 1012,
+        "left": 1253
+      },
+      "trellisRect": {
+        "x": 1140,
+        "y": 648,
+        "width": 400,
+        "height": 292,
+        "top": 648,
+        "right": 1540,
+        "bottom": 940,
+        "left": 1140
+      },
+      "trellisDisplay": "block"
+    },
+    {
+      "background": "light",
+      "state": "flowers",
+      "file": "light-flowers.png",
+      "flowerRect": {
+        "x": 1253,
+        "y": 864,
+        "width": 289,
+        "height": 148,
+        "top": 864,
+        "right": 1542,
+        "bottom": 1012,
+        "left": 1253
+      },
+      "trellisRect": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0,
+        "left": 0
+      },
+      "trellisDisplay": "none"
+    },
+    {
+      "background": "dark",
+      "state": "all",
+      "file": "dark-all.png",
+      "flowerRect": {
+        "x": 1253,
+        "y": 864,
+        "width": 289,
+        "height": 148,
+        "top": 864,
+        "right": 1542,
+        "bottom": 1012,
+        "left": 1253
+      },
+      "trellisRect": {
+        "x": 1140,
+        "y": 648,
+        "width": 400,
+        "height": 292,
+        "top": 648,
+        "right": 1540,
+        "bottom": 940,
+        "left": 1140
+      },
+      "trellisDisplay": "block"
+    },
+    {
+      "background": "dark",
+      "state": "flowers",
+      "file": "dark-flowers.png",
+      "flowerRect": {
+        "x": 1253,
+        "y": 864,
+        "width": 289,
+        "height": 148,
+        "top": 864,
+        "right": 1542,
+        "bottom": 1012,
+        "left": 1253
+      },
+      "trellisRect": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0,
+        "left": 0
+      },
+      "trellisDisplay": "none"
+    }
+  ],
+  "responsive": [
+    {
+      "viewport": [
+        1280,
+        800
+      ],
+      "flowerSize": [
+        228.45849609375,
+        116.99609375
+      ],
+      "widthPercent": 17.84832000732422,
+      "heightPercent": 14.62451171875,
+      "anchoredAtBottom": true
+    },
+    {
+      "viewport": [
+        1920,
+        1080
+      ],
+      "flowerSize": [
+        308.4189453125,
+        157.94464111328125
+      ],
+      "widthPercent": 16.063486735026043,
+      "heightPercent": 14.624503806785302,
+      "anchoredAtBottom": true
+    },
+    {
+      "viewport": [
+        2560,
+        1440
+      ],
+      "flowerSize": [
+        411.225341796875,
+        210.5928955078125
+      ],
+      "widthPercent": 16.06348991394043,
+      "heightPercent": 14.62450663248698,
+      "anchoredAtBottom": true
+    }
+  ],
+  "alpha": [
+    {
+      "name": "flowers-source.png",
+      "width": 1816,
+      "height": 866,
+      "transparentFraction": 0.7200970841684387,
+      "opaqueFraction": 0.0005837258752072926
+    },
+    {
+      "name": "trellis-source.png",
+      "width": 1456,
+      "height": 1080,
+      "transparentFraction": 0.8183887871387872,
+      "opaqueFraction": 0.0005322802197802197
+    }
+  ],
+  "scope": "Visual proof only; no native source, business logic or frozen release modified.",
+  "responsiveWithinRequestedPercentages": true,
+  "trellisAdjustment": {
+    "raisedPixelsAtReference": 72,
+    "trellisSizeUnchanged": [
+      400,
+      292
+    ],
+    "flowerLayerAndPlacementUnchanged": true,
+    "flowerOnlyScreenshotsUnmodified": true
+  }
+}

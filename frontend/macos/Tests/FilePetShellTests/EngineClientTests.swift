@@ -63,6 +63,27 @@ final class EngineClientTests: XCTestCase {
         }
     }
 
+    func testCompletedDeadlineOnlyJobDecodesActualCoreContract() async throws {
+        try await withClient({ request in
+            XCTAssertEqual(request.url!.path, "/jobs/ddl-job")
+            return (200, #"{"job_id":"ddl-job","status":"completed","result":{"path":"/tmp/notice.txt","file_name":"notice.txt","status":"needs_review","category_id":null,"category_label":null,"confidence":0,"matched_keywords":[],"reason":"有效内容线索不足","extraction_chars":88,"deadlines":[{"id":"stable-first","title":"提交实验报告","project":"软件工程","due_date":"2026-11-03","due_time":"23:59","year_inferred":false,"status":"needs_confirmation","signal":"date_before_action","raw_date":"2026年11月3日","evidence":"请于2026年11月3日23:59前提交实验报告"},{"id":"stable-second","title":"上传演示材料","project":"软件工程","due_date":"2026-11-05","due_time":null,"year_inferred":true,"status":"needs_confirmation","signal":"explicit_deadline","raw_date":"11月5日","evidence":"演示材料截止：11月5日"}]},"error":null}"#)
+        }) { client in
+            let job = try await client.job(id: "ddl-job")
+            XCTAssertEqual(job.status, "completed")
+            let result = try XCTUnwrap(job.result)
+            XCTAssertEqual(result.status, "needs_review")
+            XCTAssertNil(result.categoryID)
+            XCTAssertEqual(result.deadlines, [
+                EngineDeadline(id: "stable-first", title: "提交实验报告", project: "软件工程",
+                               dueDate: "2026-11-03", dueTime: "23:59", yearInferred: false,
+                               evidence: "请于2026年11月3日23:59前提交实验报告", signal: "date_before_action"),
+                EngineDeadline(id: "stable-second", title: "上传演示材料", project: "软件工程",
+                               dueDate: "2026-11-05", dueTime: nil, yearInferred: true,
+                               evidence: "演示材料截止：11月5日", signal: "explicit_deadline"),
+            ])
+        }
+    }
+
     func testFailedJobDecodesRootAuthorizationFailure() async throws {
         try await withClient({ _ in
             (200, #"{"job_id":"denied","status":"failed","result":null,"error":{"status_code":403,"detail":"文件不在授权的 root 文件夹内"}}"#)

@@ -20,7 +20,7 @@ final class VineModel: ObservableObject {
     private var timer: Timer?
 
     init(defaults: UserDefaults = .standard) {
-        engine = VineEngine(storage: DefaultsVineStorage(defaults: defaults))
+        engine = VineEngine(storage: DefaultsVineStorage(defaults: defaults), inventoryMode: true)
         synchronize()
     }
 
