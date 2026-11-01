@@ -269,7 +269,10 @@ final class ShellStore: ObservableObject {
             let deadlineFiles = results.filter { $0.outcome == .deadline || $0.detail.contains("DDL 待核对") }.count
             status = "分类完成：\(confirmed) 个已识别，\(review) 个待确认，\(failed) 个失败"
             if deadlineFiles > 0 { status += "；\(deadlineFiles) 份 DDL，\(garden.visibleDeadlines.count) 朵花，\(garden.queuedCount) 个排队" }
-            if review > 0, !reviewInbox.items.isEmpty { onShowPendingReviews?() }
+            // Quiet-by-default inbox: a weak classification or a tentative OCR
+            // deadline must not interrupt ordinary file feeding with a modal.
+            // The menu's pending-review count remains available on demand.
+            // Never auto-schedule an unconfirmed/ambiguous deadline.
         } catch is CancellationError {
             if runID == batchID { status = "已停止等待分类结果" }
         } catch {
