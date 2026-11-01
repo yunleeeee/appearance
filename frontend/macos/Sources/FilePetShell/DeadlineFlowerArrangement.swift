@@ -21,15 +21,15 @@ enum DeadlineFlowerArrangement {
     static func pose(index: Int, count: Int) -> PlantPose {
         switch (count, index) {
         case (1, _): return .solo  // user-approved single bloom stays nearly upright
-        case (2, 0): return PlantPose(tipShift: -3.7, bow: -2.0,
+        case (2, 0): return PlantPose(tipShift: -6.2, bow: 3.0,
                                       heightShift: -2.0, groundCover: 0.85)
-        case (2, 1): return PlantPose(tipShift: 2.1, bow: -1.3,
+        case (2, 1): return PlantPose(tipShift: 3.2, bow: -2.4,
                                       heightShift: 0, groundCover: 0.95)
-        case (3, 0): return PlantPose(tipShift: -4.5, bow: -1.4,
+        case (3, 0): return PlantPose(tipShift: -6.8, bow: 3.4,
                                       heightShift: -3.0, groundCover: 0.85)
-        case (3, 1): return PlantPose(tipShift: 1.1, bow: -1.0,
+        case (3, 1): return PlantPose(tipShift: 0.8, bow: -2.0,
                                       heightShift: 0, groundCover: 1.0)
-        case (3, 2): return PlantPose(tipShift: 3.8, bow: 1.4,
+        case (3, 2): return PlantPose(tipShift: 5.3, bow: -2.8,
                                       heightShift: -3.5, groundCover: 0.85)
         default: return .solo
         }
