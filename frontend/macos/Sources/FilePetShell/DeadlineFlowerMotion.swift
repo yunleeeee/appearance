@@ -177,12 +177,13 @@ enum DeadlineFlowerMotion {
         // Keep every approved stage crown inside the compact NSPanel. The
         // calyx remains the stem/head joint even as petals expand or droop.
         let scale = max(0.5, min(1, crownScale))
-        let requiredCrownRoom = (calyxOffsets[i].1 + sprite.anchorY) * scale
+        // Preserve the original calyx height when resizing a crown. Only the
+        // petal image gets smaller; the stem joint cannot jump on 1↔2 changes.
+        let requiredCrownRoom = calyxOffsets[i].1 + sprite.anchorY
         let y = max(30, min(bounds.height * 0.74,
                             bounds.height - 8 - requiredCrownRoom))
         let calyx = NSPoint(x: root.x + head * 2.4, y: y)
         let dx = calyxOffsets[i].0, dy = calyxOffsets[i].1
-        let heart = NSPoint(x: calyx.x - dx, y: calyx.y + dy)
         // Scale only the blossom around the stem's calyx joint: the root,
         // stalk, and original leaf sprites are never stretched or moved.
         let rect = NSRect(x: calyx.x - (dx + sprite.anchorX) * scale,
