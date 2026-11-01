@@ -95,10 +95,12 @@ enum DeadlineFlowerMotion {
     /// left at different heights, and a right leaf balances the crown.
     /// Their anchors follow their own joints, never floating above the stem.
     static func leaves(bounds: NSRect, artwork: CompactFlowerArtwork, stage: DeadlineStage,
-                       stem: CGFloat, head: CGFloat, leafLag: CGFloat = 0) -> [LeafJoint] {
-        guard let g = geometry(bounds: bounds, artwork: artwork, stage: stage, stem: stem, head: head),
+                       stem: CGFloat, head: CGFloat, leafLag: CGFloat = 0,
+                       pose: DeadlineFlowerArrangement.PlantPose = .solo) -> [LeafJoint] {
+        guard let g = geometry(bounds: bounds, artwork: artwork, stage: stage,
+                               stem: stem, head: head, pose: pose),
               let sprite = leaf else { return [] }
-        let controls = stemControls(bounds: bounds, g: g, stem: stem)
+        let controls = stemControls(g: g, stem: stem, pose: pose)
         let placements: [(CGFloat, CGFloat, CGFloat)] = [
             (0.59, -1, 2.20), // upper, broad left leaf
             (0.36, 1, 1.95),  // mid-stem right leaf
@@ -115,10 +117,16 @@ enum DeadlineFlowerMotion {
         }
     }
 
-    private static func stemControls(bounds: NSRect, g: (root: NSPoint, calyx: NSPoint, rect: NSRect),
-                                     stem: CGFloat) -> (NSPoint, NSPoint, NSPoint, NSPoint) {
-        (g.root, NSPoint(x: g.root.x + stem * 0.4, y: bounds.height * 0.25),
-         NSPoint(x: g.calyx.x + stem * 1.8, y: bounds.height * 0.63), g.calyx)
+    private static func stemControls(g: (root: NSPoint, calyx: NSPoint, rect: NSRect),
+                                     stem: CGFloat, pose: DeadlineFlowerArrangement.PlantPose)
+                                     -> (NSPoint, NSPoint, NSPoint, NSPoint) {
+        let rise = g.calyx.y - g.root.y
+        return (g.root,
+                NSPoint(x: g.root.x + pose.bow * 0.27 + stem * 0.4,
+                        y: g.root.y + rise * 0.27),
+                NSPoint(x: g.calyx.x + pose.bow + stem * 1.8,
+                        y: g.root.y + rise * 0.75),
+                g.calyx)
     }
 
     private static func cubic(_ a: NSPoint, _ b: NSPoint, _ c: NSPoint,
@@ -166,8 +174,42 @@ enum DeadlineFlowerMotion {
         }
     }
 
+    /// Small, static meadow accents rather than a second persistent widget.
+    /// All stems and blades originate at the desktop baseline; these details
+    /// intentionally do not intercept clicks or grow with file count.
+    private static func drawGround(root: NSPoint, cover: CGFloat) {
+        guard cover > 0 else { return }
+        let green = NSColor(calibratedRed: 0.24, green: 0.42, blue: 0.27, alpha: 0.90)
+        let highlight = NSColor(calibratedRed: 0.46, green: 0.59, blue: 0.32, alpha: 0.75)
+        let extent = 14 + 13 * cover
+        let blades: [(CGFloat, CGFloat, CGFloat)] = [
+            (-0.95, -0.62, 8), (-0.72, -0.19, 12), (-0.51, -0.39, 7),
+            (-0.25, 0.25, 11), (0.28, -0.16, 10), (0.56, 0.37, 8),
+            (0.81, 0.64, 13)
+        ]
+        for (index, blade) in blades.enumerated() {
+            let startX = root.x + blade.0 * extent
+            let endX = startX + blade.1 * (5 + 4 * cover)
+            let tipY = 3 + blade.2 * cover
+            let path = NSBezierPath()
+            path.move(to: NSPoint(x: startX, y: 1.5))
+            path.curve(to: NSPoint(x: endX, y: tipY),
+                       controlPoint1: NSPoint(x: startX, y: 5),
+                       controlPoint2: NSPoint(x: endX - blade.1 * 2, y: tipY * 0.8))
+            path.lineWidth = index.isMultiple(of: 3) ? 1.4 : 1.0
+            (index.isMultiple(of: 3) ? highlight : green).setStroke()
+            path.stroke()
+        }
+        // A few muted pixel-sized hints of soil; never a visible hard platform.
+        NSColor(calibratedRed: 0.30, green: 0.42, blue: 0.28, alpha: 0.55).setFill()
+        for x in [-16.0, -7.0, 9.0, 19.0] {
+            NSRect(x: root.x + x * cover, y: 0.5, width: 2, height: 1).fill()
+        }
+    }
+
     static func geometry(bounds: NSRect, artwork: CompactFlowerArtwork, stage: DeadlineStage,
-                         stem: CGFloat, head: CGFloat, crownScale: CGFloat = 1)
+                         stem: CGFloat, head: CGFloat, crownScale: CGFloat = 1,
+                         pose: DeadlineFlowerArrangement.PlantPose = .solo)
                          -> (root: NSPoint, calyx: NSPoint, rect: NSRect)? {
         guard heads.count == 6 else { return nil }
         let i = stage.rawValue
@@ -180,9 +222,9 @@ enum DeadlineFlowerMotion {
         // Preserve the original calyx height when resizing a crown. Only the
         // petal image gets smaller; the stem joint cannot jump on 1↔2 changes.
         let requiredCrownRoom = calyxOffsets[i].1 + sprite.anchorY
-        let y = max(30, min(bounds.height * 0.74,
+        let y = max(28, min(bounds.height * 0.74 + pose.heightShift,
                             bounds.height - 8 - requiredCrownRoom))
-        let calyx = NSPoint(x: root.x + head * 2.4, y: y)
+        let calyx = NSPoint(x: root.x + pose.tipShift + head * 2.4, y: y)
         let dx = calyxOffsets[i].0, dy = calyxOffsets[i].1
         // Scale only the blossom around the stem's calyx joint: the root,
         // stalk, and original leaf sprites are never stretched or moved.
@@ -195,24 +237,27 @@ enum DeadlineFlowerMotion {
     @discardableResult
     static func draw(bounds: NSRect, artwork: CompactFlowerArtwork, stage: DeadlineStage,
                      stem: CGFloat, head: CGFloat,
-                     petals: (CGFloat, CGFloat, CGFloat), crownScale: CGFloat = 1) -> Bool {
+                     petals: (CGFloat, CGFloat, CGFloat), crownScale: CGFloat = 1,
+                     pose: DeadlineFlowerArrangement.PlantPose = .solo) -> Bool {
         guard let g = geometry(bounds: bounds, artwork: artwork, stage: stage,
-                               stem: stem, head: head, crownScale: crownScale) else { return false }
+                               stem: stem, head: head, crownScale: crownScale,
+                               pose: pose) else { return false }
         NSGraphicsContext.current?.imageInterpolation = .none
+        drawGround(root: g.root, cover: pose.groundCover)
+        let controls = stemControls(g: g, stem: stem, pose: pose)
         let path = NSBezierPath()
-        path.move(to: g.root)
-        path.curve(to: g.calyx,
-                   controlPoint1: NSPoint(x: g.root.x + stem * 0.4, y: bounds.height * 0.25),
-                   controlPoint2: NSPoint(x: g.calyx.x + stem * 1.8, y: bounds.height * 0.63))
+        path.move(to: controls.0)
+        path.curve(to: controls.3, controlPoint1: controls.1,
+                   controlPoint2: controls.2)
         path.lineWidth = 2
         NSColor(calibratedRed: 0.15, green: 0.30, blue: 0.22, alpha: 1).setStroke()
         path.stroke()
 
         let second = NSBezierPath()
         second.move(to: NSPoint(x: g.root.x - 0.5, y: g.root.y))
-        second.curve(to: NSPoint(x: g.calyx.x - 0.5, y: g.calyx.y),
-            controlPoint1: NSPoint(x: g.root.x + stem * 0.4 - 0.5, y: bounds.height * 0.25),
-            controlPoint2: NSPoint(x: g.calyx.x + stem * 1.8 - 0.5, y: bounds.height * 0.63))
+        second.curve(to: NSPoint(x: controls.3.x - 0.5, y: controls.3.y),
+            controlPoint1: NSPoint(x: controls.1.x - 0.5, y: controls.1.y),
+            controlPoint2: NSPoint(x: controls.2.x - 0.5, y: controls.2.y))
         second.lineWidth = 1
         NSColor(calibratedRed: 0.39, green: 0.56, blue: 0.37, alpha: 1).setStroke()
         second.stroke()
@@ -220,7 +265,7 @@ enum DeadlineFlowerMotion {
         // Reuse the original textured leaf artwork at two real stem joints.
         // Leaves are behind the head, and follow wind just after the stalk.
         drawLeaves(leaves(bounds: bounds, artwork: artwork, stage: stage, stem: stem,
-                          head: head, leafLag: (petals.0 - stem)))
+                          head: head, leafLag: (petals.0 - stem), pose: pose))
         let sprite = heads[stage.rawValue]
         guard let context = NSGraphicsContext.current?.cgContext else { return false }
         if stage == .bloom {
@@ -269,13 +314,15 @@ enum DeadlineFlowerMotion {
 
     static func hit(_ point: NSPoint, bounds: NSRect, artwork: CompactFlowerArtwork,
                     stage: DeadlineStage, stem: CGFloat, head: CGFloat,
-                    crownScale: CGFloat = 1) -> Bool {
+                    crownScale: CGFloat = 1,
+                    pose: DeadlineFlowerArrangement.PlantPose = .solo) -> Bool {
         guard let g = geometry(bounds: bounds, artwork: artwork, stage: stage,
-                               stem: stem, head: head, crownScale: crownScale) else { return false }
+                               stem: stem, head: head, crownScale: crownScale,
+                               pose: pose) else { return false }
         if heads[stage.rawValue].contains(point, in: g.rect) { return true }
         if let sprite = leaf {
             for joint in leaves(bounds: bounds, artwork: artwork, stage: stage,
-                                stem: stem, head: head) {
+                                stem: stem, head: head, pose: pose) {
                 let rect = leafRect(joint, sprite: sprite)
                 let pointInSprite = joint.side < 0
                     ? NSPoint(x: 2 * joint.attach.x - point.x, y: point.y) : point
@@ -285,8 +332,20 @@ enum DeadlineFlowerMotion {
                 if sprite.contains(pointInSprite, in: positiveRect) { return true }
             }
         }
-        let t = min(1, max(0, (point.y - g.root.y) / max(1, g.calyx.y - g.root.y)))
-        return point.y >= g.root.y && point.y <= g.calyx.y &&
-            abs(point.x - (g.root.x * (1 - t) + g.calyx.x * t)) <= 2
+        let c = stemControls(g: g, stem: stem, pose: pose)
+        var last = c.0
+        for i in 1...24 {
+            let current = cubic(c.0, c.1, c.2, c.3, CGFloat(i) / 24)
+            let dx = current.x - last.x, dy = current.y - last.y
+            let lengthSquared = dx * dx + dy * dy
+            let fraction = lengthSquared > 0
+                ? max(0, min(1, ((point.x - last.x) * dx + (point.y - last.y) * dy) / lengthSquared))
+                : CGFloat(0)
+            if hypot(point.x - last.x - fraction * dx,
+                     point.y - last.y - fraction * dy) <= 2 { return true }
+            last = current
+        }
+        // Grass is decorative, intentionally click-through.
+        return false
     }
 }
