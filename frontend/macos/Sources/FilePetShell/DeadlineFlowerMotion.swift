@@ -200,6 +200,27 @@ enum DeadlineFlowerMotion {
             (index.isMultiple(of: 3) ? highlight : green).setStroke()
             path.stroke()
         }
+        if cover >= 0.7 {
+            // Tiny rounded shoots break up the straight grass strokes without
+            // creating a large foreground lawn or intercepting desktop clicks.
+            NSColor(calibratedRed: 0.33, green: 0.49, blue: 0.29, alpha: 0.88).setFill()
+            let shoots: [(CGFloat, CGFloat, CGFloat)] = [
+                (-14, -1, 5), (-4, 1, 4), (15, 1, 6)
+            ]
+            for (offset, side, height) in shoots {
+                let x = root.x + offset
+                let blade = NSBezierPath()
+                blade.move(to: NSPoint(x: x, y: 2))
+                blade.curve(to: NSPoint(x: x + side * 6, y: 2 + height * cover),
+                              controlPoint1: NSPoint(x: x + side * 3, y: 2),
+                              controlPoint2: NSPoint(x: x + side * 6, y: 4 + height * cover))
+                blade.curve(to: NSPoint(x: x, y: 2),
+                              controlPoint1: NSPoint(x: x + side * 5, y: 2 + height * cover),
+                              controlPoint2: NSPoint(x: x + side * 1, y: 2))
+                blade.close()
+                blade.fill()
+            }
+        }
         // A few muted pixel-sized hints of soil; never a visible hard platform.
         NSColor(calibratedRed: 0.30, green: 0.42, blue: 0.28, alpha: 0.55).setFill()
         let soilOffsets: [CGFloat] = [-16, -7, 9, 19]
