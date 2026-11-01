@@ -5,6 +5,36 @@ import AppKit
 /// baseline and form a small asymmetrical garden rather than separate widgets.
 /// Layout is pure and can be checked without creating an NSPanel.
 enum DeadlineFlowerArrangement {
+    /// Static character of a plant, separate from the deadline stage or wind.
+    /// Offsets are in native view points, intentionally smaller than the petals.
+    /// All variants keep their roots on the same desktop baseline.
+    struct PlantPose: Equatable {
+        let tipShift: CGFloat
+        let bow: CGFloat
+        let heightShift: CGFloat
+        let groundCover: CGFloat
+
+        static let solo = PlantPose(tipShift: 0, bow: 0.65,
+                                    heightShift: 0, groundCover: 0.45)
+    }
+
+    static func pose(index: Int, count: Int) -> PlantPose {
+        switch (count, index) {
+        case (1, _): return .solo  // user-approved single bloom stays nearly upright
+        case (2, 0): return PlantPose(tipShift: -3.7, bow: -2.0,
+                                      heightShift: -2.0, groundCover: 0.85)
+        case (2, 1): return PlantPose(tipShift: 2.1, bow: -1.3,
+                                      heightShift: 0, groundCover: 0.95)
+        case (3, 0): return PlantPose(tipShift: -4.5, bow: -1.4,
+                                      heightShift: -3.0, groundCover: 0.85)
+        case (3, 1): return PlantPose(tipShift: 1.1, bow: -1.0,
+                                      heightShift: 0, groundCover: 1.0)
+        case (3, 2): return PlantPose(tipShift: 3.8, bow: 1.4,
+                                      heightShift: -3.5, groundCover: 0.85)
+        default: return .solo
+        }
+    }
+
     static func rootOffsets(count: Int) -> [CGFloat] {
         switch count {
         case 1: [-266]
