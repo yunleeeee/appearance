@@ -84,6 +84,56 @@ final class DeadlineFlowerArrangementTests: XCTestCase {
             "The large transparent panel must still let clicks through")
     }
 
+    func testMeadowPoseIsUprightSoloAndNaturallyOutwardInGroups() throws {
+        let solo = DeadlineFlowerArrangement.pose(index: 0, count: 1)
+        XCTAssertEqual(solo.tipShift, 0)
+        XCTAssertLessThan(abs(solo.bow), 1, "The approved solo flower must stay upright")
+        XCTAssertLessThan(solo.groundCover, 0.6)
+
+        let left = DeadlineFlowerArrangement.pose(index: 0, count: 2)
+        let right = DeadlineFlowerArrangement.pose(index: 1, count: 2)
+        XCTAssertLessThan(left.tipShift, 0)
+        XCTAssertGreaterThan(right.tipShift, 0)
+        XCTAssertLessThan(abs(left.tipShift), 6)
+        XCTAssertLessThan(abs(right.tipShift), 6)
+        XCTAssertGreaterThan(left.groundCover, solo.groundCover)
+        XCTAssertGreaterThan(right.groundCover, solo.groundCover)
+
+        let trio = (0..<3).map { DeadlineFlowerArrangement.pose(index: $0, count: 3) }
+        XCTAssertLessThan(trio[0].tipShift, 0)
+        XCTAssertGreaterThan(trio[2].tipShift, 0)
+        XCTAssertLessThan(abs(trio[1].tipShift), 2)
+        XCTAssertNotEqual(trio[0].heightShift, trio[2].heightShift)
+    }
+
+    func testEachPoseKeepsRootsAnchoredAndCalyxStemConnected() throws {
+        for count in 1...3 {
+            for index in 0..<count {
+                let artwork = CompactFlowerArtwork.plants[index]
+                let pose = DeadlineFlowerArrangement.pose(index: index, count: count)
+                let bounds = NSRect(origin: .zero, size: artwork.size)
+                for stage in DeadlineStage.allCases {
+                    let still = try XCTUnwrap(DeadlineFlowerMotion.geometry(
+                        bounds: bounds, artwork: artwork, stage: stage,
+                        stem: 0, head: 0, pose: pose))
+                    let moving = try XCTUnwrap(DeadlineFlowerMotion.geometry(
+                        bounds: bounds, artwork: artwork, stage: stage,
+                        stem: 0.7, head: -0.4, pose: pose))
+                    XCTAssertEqual(still.root, moving.root)
+                    XCTAssertEqual(still.root.y, 3)
+                    XCTAssertEqual(still.calyx.x, artwork.stemX + pose.tipShift)
+                    XCTAssertGreaterThan(still.calyx.y, still.root.y)
+                    XCTAssertTrue(bounds.contains(NSPoint(x: still.rect.midX, y: still.rect.midY)),
+                                  "Petals should remain in the existing window")
+                    XCTAssertTrue(DeadlineFlowerMotion.hit(
+                        still.calyx, bounds: bounds, artwork: artwork,
+                        stage: stage, stem: 0, head: 0, pose: pose),
+                        "The calyx must remain an interactive extension of the stem")
+                }
+            }
+        }
+    }
+
     func testUnsupportedCountsDoNotInventExtraWindows() {
         XCTAssertTrue(DeadlineFlowerArrangement.rootOffsets(count: 0).isEmpty)
         XCTAssertTrue(DeadlineFlowerArrangement.rootOffsets(count: 4).isEmpty)
