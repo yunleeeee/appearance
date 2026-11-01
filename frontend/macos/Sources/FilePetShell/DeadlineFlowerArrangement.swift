@@ -38,8 +38,8 @@ enum DeadlineFlowerArrangement {
     static func rootOffsets(count: Int) -> [CGFloat] {
         switch count {
         case 1: [-266]
-        case 2: [-266, -199] // 67pt apart, instead of the old ~100pt
-        case 3: [-297, -229, -161]
+        case 2: [-266, -209] // compact 57pt gap lets basal meadow shoots visually connect
+        case 3: [-291, -235, -179] // 56pt gaps with gentle outward secondary poses
         default: []
         }
     }
