@@ -82,6 +82,7 @@ enum CompactGrapeLayout {
         let center: CGPoint
         let size: CGSize
         let depth: Double
+        var row: Int = 0
     }
 
     static func berries(count: Int) -> [Berry] {
@@ -94,17 +95,53 @@ enum CompactGrapeLayout {
         ]
         if count <= first.count {
             return first.prefix(count).map {
-                Berry(center: CGPoint(x: $0.0, y: $0.1), size: CGSize(width: $0.2, height: $0.2 * 1.04), depth: $0.3)
+                Berry(center: CGPoint(x: 32 + ($0.0 - 32) * 0.88, y: 12 + $0.1 * 0.80),
+                      size: CGSize(width: $0.2 * 0.82, height: $0.2 * 0.84), depth: $0.3)
             }
         }
-        let columns = max(4, Int(ceil(sqrt(Double(count) * 0.72))))
-        let rows = Int(ceil(Double(count) / Double(columns)))
-        let side = min(60 / CGFloat(columns), 82 / CGFloat(rows))
-        return (0..<count).map { index in
-            Berry(center: CGPoint(x: CGFloat(index % columns) * side + (64 - CGFloat(columns) * side) / 2 + side / 2,
-                                  y: CGFloat(index / columns) * side + side / 2),
-                  size: CGSize(width: side * 1.08, height: side * 1.10), depth: Double(index % 2) * 0.1)
+        // Shape dense grape bunches as a hanging, tapered cluster rather than
+        // switching from hand-placed berries to a rectangular spreadsheet grid.
+        // Every real file still owns exactly one visible berry.
+        let rows = max(5, Int(ceil(sqrt(Double(count) * 1.55))))
+        var widest = max(4, Int(ceil(Double(count) / (Double(rows) * 0.70))))
+        func capacities(_ width: Int) -> [Int] {
+            (0..<rows).map { row in
+                let taper = 1.0 - 0.56 * Double(row) / Double(max(1, rows - 1))
+                return max(2, Int((Double(width) * taper).rounded()))
+            }
         }
+        var rowsOfFruit = capacities(widest)
+        while rowsOfFruit.reduce(0, +) < count {
+            widest += 1
+            rowsOfFruit = capacities(widest)
+        }
+
+        let horizontalStep = min(CGFloat(15), 60 / CGFloat(widest))
+        let verticalStep = min(CGFloat(13), 72 / CGFloat(rows))
+        let diameter = min(CGFloat(18), horizontalStep * 1.11, verticalStep * 1.13)
+        let size = CGSize(width: diameter, height: diameter * 1.04)
+        var output: [Berry] = []
+        output.reserveCapacity(count)
+        for row in rowsOfFruit.indices {
+            let amount = min(rowsOfFruit[row], count - output.count)
+            if amount <= 0 { break }
+            for column in 0..<amount {
+                let stagger: CGFloat = row.isMultiple(of: 2) ? -0.10 : 0.10
+                // Tiny deterministic variations in placement and fruit size
+                // remove the abacus-like rows without randomizing each redraw.
+                let dx = CGFloat(((row + 1) * 41 + (column + 3) * 73) % 17 - 8) * 0.16
+                let dy = CGFloat(((column + 1) * 11 + row * 7) % 9 - 4) * 0.18
+                let variation = CGFloat(0.93 + Double((row * 7 + column * 3) % 5) * 0.025)
+                let berrySize = CGSize(width: size.width * variation, height: size.height * variation)
+                let initialX = 32 + (CGFloat(column) - CGFloat(amount - 1) / 2 + stagger) * horizontalStep + dx
+                let initialY = 14 + (CGFloat(row) + 0.5) * verticalStep + dy
+                let x = min(64 - berrySize.width / 2, max(berrySize.width / 2, initialX))
+                let y = min(88 - berrySize.height / 2, max(berrySize.height / 2, initialY))
+                output.append(Berry(center: CGPoint(x: x, y: y), size: berrySize,
+                                    depth: Double((column + row) % 3) * 0.05, row: row))
+            }
+        }
+        return output
     }
 }
 
@@ -117,6 +154,11 @@ struct GrapeClusterView: View {
     var body: some View {
         let berries = CompactGrapeLayout.berries(count: branch.count)
         ZStack(alignment: .topLeading) {
+            if !berries.isEmpty {
+                GrapeCrownView()
+                    .frame(width: 64, height: 30)
+                    .allowsHitTesting(false)
+            }
             ForEach(Array(berries.indices.sorted { berries[$0].depth > berries[$1].depth }), id: \.self) { index in
                 PixelGrapeBerry(category: branch.id,
                     shouldGrow: growth?.category == branch.id && growth?.grapeIndex == index,
@@ -126,6 +168,44 @@ struct GrapeClusterView: View {
             }
         }
         .frame(width: 64, height: 88)
+    }
+}
+
+/// A tiny native fruit stalk and two original textured leaves. Reuses the
+/// approved v2 leaf crop for a consistent plant vocabulary; no vector glow,
+/// breathing, overlay counter, or extra phantom grapes.
+private struct GrapeCrownView: View {
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Canvas { context, _ in
+                let stalk = Path { p in
+                    p.move(to: CGPoint(x: 32, y: 0))
+                    p.addLine(to: CGPoint(x: 32, y: 12))
+                    p.addLine(to: CGPoint(x: 28, y: 18))
+                }
+                context.stroke(stalk, with: .color(Color(red: 0.22, green: 0.35, blue: 0.22)),
+                               style: StrokeStyle(lineWidth: 2, lineCap: .square))
+                let light = Path { p in
+                    p.move(to: CGPoint(x: 33, y: 2))
+                    p.addLine(to: CGPoint(x: 33, y: 11))
+                }
+                context.stroke(light, with: .color(Color(red: 0.39, green: 0.52, blue: 0.32)),
+                               lineWidth: 1)
+            }
+            if let leaf = DeadlineFlowerMotion.leaf?.image {
+                Image(nsImage: leaf)
+                    .resizable()
+                    .interpolation(.none)
+                    .frame(width: 15, height: 17)
+                    .scaleEffect(x: -1, y: 1)
+                    .position(x: 24, y: 9)
+                Image(nsImage: leaf)
+                    .resizable()
+                    .interpolation(.none)
+                    .frame(width: 13, height: 15)
+                    .position(x: 39, y: 8)
+            }
+        }
     }
 }
 

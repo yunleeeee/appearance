@@ -210,42 +210,48 @@ final class ShellStore: ObservableObject {
                     let job = try await finishedJob(path: url.path)
                     try Task.checkCancellation()
                     guard runID == batchID else { return }
-                    if ["completed", "needs_review"].contains(job.status), let result = job.result,
-                       !result.deadlines.isEmpty {
-                        let knownIDs = Set(garden.deadlines.map(\.id))
-                        let pending = result.deadlines.filter { $0.requiresConfirmation && !knownIDs.contains($0.id) }
-                        let added = garden.feed(result.deadlines.filter { !$0.requiresConfirmation })
-                        if !pending.isEmpty {
-                            reviewInbox.enqueue(result: result, candidates: pending)
-                            let detail = "识别到 \(pending.count) 个需核对的 DDL；请在“待确认事项”中确认并生成花朵"
-                            results.append(ShellFileResult(fileName: url.lastPathComponent, outcome: .needsReview,
-                                categoryLabel: nil, detail: detail,
-                                reviewID: URL(fileURLWithPath: result.path).standardizedFileURL.path))
-                        } else {
-                            reviewInbox.remove(id: URL(fileURLWithPath: result.path).standardizedFileURL.path)
-                            let detail = added > 0 ? "新增 \(added) 个 DDL；当前 \(garden.visibleDeadlines.count) 朵花，\(garden.queuedCount) 个排队" : "DDL 已投喂或已收获，无需重复添加"
-                            results.append(ShellFileResult(fileName: url.lastPathComponent, outcome: .deadline,
-                                                           categoryLabel: nil, detail: detail))
-                        }
-                    } else if job.status == "completed", let result = job.result,
-                       result.status == "classified", let category = result.categoryID, !category.isEmpty {
-                        let label = result.categoryLabel ?? categoryLabels[category] ?? category
-                        categoryLabels[category] = label
-                        vine.setCategoryLabels(categoryLabels)
-                        defaults.set(categoryLabels, forKey: "filepet.shell.inventory.labels.v1")
+                    if ["completed", "needs_review"].contains(job.status), let result = job.result {
+                        // Classification and DDL candidates are independent outcomes.
                         let identity = URL(fileURLWithPath: result.path).standardizedFileURL.path
-                        let isNew = classifiedPaths.insert(identity).inserted
-                        if isNew {
-                            vine.recordSuccess(category: category)
-                            defaults.set(classifiedPaths.sorted(), forKey: pathsKey)
+                        var label: String?
+                        var newGrape = false
+                        if result.status == "classified", let category = result.categoryID, !category.isEmpty {
+                            let resolved = result.categoryLabel ?? categoryLabels[category] ?? category
+                            label = resolved
+                            categoryLabels[category] = resolved
+                            vine.setCategoryLabels(categoryLabels)
+                            defaults.set(categoryLabels, forKey: "filepet.shell.inventory.labels.v1")
+                            if classifiedPaths.insert(identity).inserted {
+                                vine.recordSuccess(category: category)
+                                defaults.set(classifiedPaths.sorted(), forKey: pathsKey)
+                                newGrape = true
+                            }
                         }
-                        results.append(ShellFileResult(fileName: url.lastPathComponent, outcome: .classified,
-                                                       categoryLabel: label, detail: isNew ? result.reason : "这个文件已分类，葡萄数量保持不变"))
-                    } else if job.status == "needs_review" {
-                        if let result = job.result { reviewInbox.enqueue(result: result) }
-                        results.append(ShellFileResult(fileName: url.lastPathComponent, outcome: .needsReview,
-                            categoryLabel: nil, detail: job.result?.reason ?? "需要你确认分类",
-                            reviewID: job.result.map { URL(fileURLWithPath: $0.path).standardizedFileURL.path }))
+                        let known = Set(garden.deadlines.map(\.id))
+                        let toReview = result.deadlines.filter {
+                            $0.requiresConfirmation && !known.contains($0.id)
+                        }
+                        let added = garden.feed(result.deadlines.filter { !$0.requiresConfirmation })
+                        let categoryPending = label == nil
+                        if categoryPending || !toReview.isEmpty {
+                            reviewInbox.enqueue(result: result, candidates: toReview,
+                                                needsCategoryReview: categoryPending)
+                        } else {
+                            reviewInbox.remove(id: identity)
+                        }
+                        let outcome: ShellFileResult.Outcome
+                        if categoryPending || !toReview.isEmpty { outcome = .needsReview }
+                        else if result.deadlines.isEmpty { outcome = .classified }
+                        else { outcome = .deadline }
+                        let categorySummary = label == nil ? "分类待确认" :
+                            (newGrape ? "已新增分类葡萄" : "分类葡萄已计数")
+                        let deadlineSummary = !toReview.isEmpty
+                            ? "\(toReview.count) 条 DDL 待核对"
+                            : (result.deadlines.isEmpty ? "无 DDL" : "新增 \(added) 朵花")
+                        results.append(ShellFileResult(
+                            fileName: url.lastPathComponent, outcome: outcome,
+                            categoryLabel: label, detail: "\(categorySummary)；\(deadlineSummary)",
+                            reviewID: (categoryPending || !toReview.isEmpty) ? identity : nil))
                     } else {
                         results.append(ShellFileResult(fileName: url.lastPathComponent, outcome: .failed,
                                                        categoryLabel: nil, detail: job.error?.detail ?? "分类引擎未返回有效结果"))
@@ -257,13 +263,16 @@ final class ShellStore: ObservableObject {
                                                    categoryLabel: nil, detail: friendlyError(error)))
                 }
             }
-            let confirmed = results.filter { $0.outcome == .classified }.count
+            let confirmed = results.filter { $0.categoryLabel != nil }.count
             let review = results.filter { $0.outcome == .needsReview }.count
             let failed = results.filter { $0.outcome == .failed }.count
-            let deadlineFiles = results.filter { $0.outcome == .deadline }.count
+            let deadlineFiles = results.filter { $0.outcome == .deadline || $0.detail.contains("DDL 待核对") }.count
             status = "分类完成：\(confirmed) 个已识别，\(review) 个待确认，\(failed) 个失败"
             if deadlineFiles > 0 { status += "；\(deadlineFiles) 份 DDL，\(garden.visibleDeadlines.count) 朵花，\(garden.queuedCount) 个排队" }
-            if review > 0, !reviewInbox.items.isEmpty { onShowPendingReviews?() }
+            // Quiet-by-default inbox: a weak classification or a tentative OCR
+            // deadline must not interrupt ordinary file feeding with a modal.
+            // The menu's pending-review count remains available on demand.
+            // Never auto-schedule an unconfirmed/ambiguous deadline.
         } catch is CancellationError {
             if runID == batchID { status = "已停止等待分类结果" }
         } catch {
@@ -313,7 +322,7 @@ final class ShellStore: ObservableObject {
             vine.scheduleSleep()
             defaults.set(classifiedPaths.sorted(), forKey: pathsKey)
         }
-        reviewInbox.remove(id: reviewID)
+        reviewInbox.resolveCategory(reviewID: reviewID)
         status = "已确认为“\(label)”，葡萄计数已更新"
         updateReviewedResult(review, outcome: .classified, detail: status, categoryLabel: label)
         return nil

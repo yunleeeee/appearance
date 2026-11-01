@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private weak var summaryMenuItem: NSMenuItem?
     private weak var classifyMenuItem: NSMenuItem?
     private weak var flowerMenuItem: NSMenuItem?
+    private weak var queueMenuItem: NSMenuItem?
     private weak var applicationEngineMenuItem: NSMenuItem?
     private weak var applicationSummaryMenuItem: NSMenuItem?
     private weak var reviewMenuItem: NSMenuItem?
@@ -152,7 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func setPanelVisible(_ visible: Bool) {
         petVisible = visible
-        flowerController?.setVisible(visible)
+        // The trellis may sleep or hide while deadline flowers remain present.
         store.vine.setTheftPresentationEnabled(visible)
         if visible {
             vinePanel?.orderFrontRegardless()
@@ -233,6 +234,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         flowers.isEnabled = false
         menu.addItem(flowers)
         flowerMenuItem = flowers
+        let queue = NSMenuItem(title: "DDL 任务列表", action: nil, keyEquivalent: "")
+        queue.submenu = NSMenu(title: "DDL 任务列表")
+        menu.addItem(queue)
+        queueMenuItem = queue
         menu.addItem(.separator())
         let choose = NSMenuItem(title: "选择文件分类…", action: #selector(chooseFiles), keyEquivalent: "")
         choose.target = self
@@ -248,6 +253,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let detail = NSMenuItem(title: "查看最近分类结果…", action: #selector(showResults), keyEquivalent: "")
         detail.target = self
         menu.addItem(detail)
+        let undo = NSMenuItem(title: "撤销最近一次采摘", action: #selector(undoHarvest), keyEquivalent: "")
+        undo.target = self
+        menu.addItem(undo)
         menu.addItem(.separator())
 
         let toggle = NSMenuItem(
@@ -302,6 +310,90 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         summaryMenuItem?.title = store.status
         classifyMenuItem?.isEnabled = !store.isBusy
         flowerMenuItem?.title = "DDL 花朵：\(store.garden.visibleDeadlines.count) 朵，\(store.garden.queuedCount) 项排队 · 点击收获"
+        rebuildDeadlineMenu()
+    }
+
+    private func rebuildDeadlineMenu() {
+        guard let submenu = queueMenuItem?.submenu else { return }
+        submenu.removeAllItems()
+        let tasks = store.garden.activeDeadlines.sorted {
+            if $0.dueDate != $1.dueDate { return $0.dueDate < $1.dueDate }
+            if $0.dueTime != $1.dueTime { return ($0.dueTime ?? "zz") < ($1.dueTime ?? "zz") }
+            return $0.id < $1.id
+        }
+        if tasks.isEmpty {
+            let item = NSMenuItem(title: "目前没有未完成的 DDL", action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            submenu.addItem(item)
+        }
+        for deadline in tasks.prefix(40) {
+            let stage = store.garden.stage(for: deadline)?.label ?? "待核对"
+            let time = deadline.dueDate + (deadline.dueTime.map { " " + $0 } ?? "（时间未注明）")
+            let item = NSMenuItem(title: "\(stage) · \(deadline.title) · \(time)",
+                                  action: #selector(showDeadlineFromMenu(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = deadline.id
+            submenu.addItem(item)
+        }
+        if tasks.count > 40 {
+            let remaining = NSMenuItem(title: "另外 \(tasks.count - 40) 项", action: nil, keyEquivalent: "")
+            remaining.isEnabled = false
+            submenu.addItem(remaining)
+        }
+    }
+
+    @objc private func showDeadlineFromMenu(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String,
+              let deadline = store.garden.deadlines.first(where: { $0.id == id }) else { return }
+        let alert = NSAlert()
+        alert.messageText = deadline.title
+        alert.informativeText = """
+            项目：\(deadline.project)
+            截止：\(deadline.dueDate) \(deadline.dueTime ?? "（时间未注明）")
+            状态：\(store.garden.stage(for: deadline)?.label ?? "待确认")
+            \(deadline.yearInferred ? "年份曾由系统推断，需要核实。\\n" : "")来源：\(deadline.sourcePath ?? "未知")
+            证据：\(deadline.evidence)
+            """
+        alert.addButton(withTitle: "关闭")
+        alert.addButton(withTitle: "编辑截止日期…")
+        if deadline.sourcePath != nil { alert.addButton(withTitle: "查看来源") }
+        NSApp.activate(ignoringOtherApps: true)
+        let response = alert.runModal()
+        if response == .alertSecondButtonReturn {
+            editDeadline(deadline)
+        } else if response == .alertThirdButtonReturn, let path = deadline.sourcePath {
+            NSWorkspace.shared.open(URL(fileURLWithPath: path))
+        }
+    }
+
+    private func editDeadline(_ deadline: GardenDeadline) {
+        let alert = NSAlert()
+        alert.messageText = "编辑 \(deadline.title) 的截止时间"
+        alert.informativeText = "输入 YYYY-MM-DD；时间可空，格式 HH:mm。编辑将保留花朵和完成记录。"
+        let content = NSStackView()
+        content.orientation = .vertical
+        content.spacing = 8
+        let dateField = NSTextField(string: deadline.dueDate)
+        dateField.placeholderString = "YYYY-MM-DD"
+        let timeField = NSTextField(string: deadline.dueTime ?? "")
+        timeField.placeholderString = "HH:mm（可留空）"
+        content.addArrangedSubview(dateField)
+        content.addArrangedSubview(timeField)
+        content.frame = NSRect(x: 0, y: 0, width: 290, height: 58)
+        alert.accessoryView = content
+        alert.addButton(withTitle: "保存")
+        alert.addButton(withTitle: "取消")
+        if alert.runModal() == .alertFirstButtonReturn {
+            let time = timeField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let error = store.garden.edit(id: deadline.id, title: deadline.title,
+                project: deadline.project, dueDate: dateField.stringValue,
+                dueTime: time.isEmpty ? nil : time) {
+                let failure = NSAlert()
+                failure.messageText = "无法更新 DDL"
+                failure.informativeText = error
+                failure.runModal()
+            }
+        }
     }
 
     @objc private func chooseFiles() { store.chooseFiles() }
@@ -311,6 +403,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func showPendingReviews() {
         if reviewWindowController == nil { reviewWindowController = ReviewWindowController(store: store) }
         reviewWindowController?.show()
+    }
+
+    @objc private func undoHarvest() {
+        if store.garden.undoLastHarvest() != nil { store.garden.refreshTime() }
     }
 
     @objc private func toggleVine() {

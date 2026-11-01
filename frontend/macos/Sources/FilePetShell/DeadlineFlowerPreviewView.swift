@@ -4,6 +4,25 @@ import SwiftUI
 struct DeadlineFlowerDetailsView: View {
     let deadline: GardenDeadline
     let queuedCount: Int
+    var stage: DeadlineStage? = nil
+    var now: Date = Date()
+    var onOpenSource: (() -> Void)? = nil
+
+    private var remainingText: String {
+        let parser = DateFormatter()
+        parser.locale = Locale(identifier: "en_US_POSIX")
+        parser.timeZone = .current
+        parser.calendar = Calendar(identifier: .gregorian)
+        parser.isLenient = false
+        parser.dateFormat = deadline.dueTime?.split(separator: ":").count == 3
+            ? "yyyy-MM-dd HH:mm:ss" : "yyyy-MM-dd HH:mm"
+        let stamp = deadline.dueDate + " " + (deadline.dueTime ?? "")
+        guard let date = parser.date(from: stamp) else { return "请核对截止时间" }
+        let hours = abs(date.timeIntervalSince(now)) / 3600
+        let quantity = hours >= 48 ? String(format: "%.0f 天", hours / 24)
+            : String(format: "%.1f 小时", hours)
+        return date <= now ? "已逾期 " + quantity : "剩余 " + quantity
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -14,8 +33,35 @@ struct DeadlineFlowerDetailsView: View {
             if deadline.yearInferred {
                 Text("年份根据投喂日期推定").font(.caption).foregroundStyle(.secondary)
             }
+            if let stage {
+                Label("花期：\(stage.label)", systemImage: "leaf").font(.caption)
+            }
+            if deadline.yearInferred {
+                Text("推断年份：请先核对日期").font(.caption).foregroundStyle(.orange)
+            }
+            if let time = deadline.dueTime {
+                Text(remainingText).font(.caption).foregroundStyle(.secondary)
+                Text("时间按本机时区解释：\(time)").font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text("时间未注明，按日历日期显示，不触发小时级提醒")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if let path = deadline.sourcePath {
+                HStack {
+                    Text("来源：" + URL(fileURLWithPath: path).lastPathComponent)
+                        .font(.caption).lineLimit(1)
+                    if onOpenSource != nil {
+                        Button("查看来源") { onOpenSource?() }
+                            .controlSize(.small)
+                    }
+                }
+            }
+            if !deadline.evidence.isEmpty {
+                Text("证据：" + deadline.evidence).font(.caption)
+                    .foregroundStyle(.secondary).lineLimit(3)
+            }
             Divider()
-            Text("点击花朵收获，完成这项 DDL").font(.caption)
+            Text("单击花朵并确认，才会标记完成；可在菜单撤销采摘").font(.caption)
             if queuedCount > 0 {
                 Text("另有 \(queuedCount) 项 DDL 排队，收获后依次开花")
                     .font(.caption).foregroundStyle(.secondary)

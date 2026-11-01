@@ -9,6 +9,7 @@ struct PendingFileReview: Identifiable, Codable, Equatable {
     let reason: String
     var candidates: [EngineDeadline]
     let createdAt: Date
+    var needsCategoryReview: Bool? = nil
 }
 
 @MainActor
@@ -25,7 +26,7 @@ final class FileReviewInbox: ObservableObject {
         catch { persistenceError = "读取待确认事项失败：\(error.localizedDescription)" }
     }
 
-    func enqueue(result: EngineClassificationResult, candidates: [EngineDeadline]? = nil) {
+    func enqueue(result: EngineClassificationResult, candidates: [EngineDeadline]? = nil, needsCategoryReview: Bool? = nil) {
         let path = URL(fileURLWithPath: result.path).standardizedFileURL.path
         let previous = items.first { $0.id == path }
         let proposed = candidates ?? result.deadlines
@@ -33,7 +34,8 @@ final class FileReviewInbox: ObservableObject {
             ? "图片中的截止日期需要核对，请确认内容、时间和项目。" : result.reason
         let review = PendingFileReview(id: path, path: path, fileName: result.fileName,
             reason: reason, candidates: proposed,
-            createdAt: previous?.createdAt ?? Date())
+            createdAt: previous?.createdAt ?? Date(),
+            needsCategoryReview: needsCategoryReview ?? (result.status != "classified"))
         var updated = items
         if let index = updated.firstIndex(where: { $0.id == path }) { updated[index] = review }
         else { updated.append(review) }
@@ -44,9 +46,22 @@ final class FileReviewInbox: ObservableObject {
 
     func resolveCandidate(reviewID: String, candidateID: String?) {
         guard let index = items.firstIndex(where: { $0.id == reviewID }) else { return }
-        guard let candidateID else { remove(id: reviewID); return }
+        guard let candidateID else {
+            if items[index].needsCategoryReview != true { remove(id: reviewID) }
+            return
+        }
         var updated = items
         updated[index].candidates.removeAll { $0.id == candidateID }
+        if updated[index].candidates.isEmpty && updated[index].needsCategoryReview != true {
+            updated.remove(at: index)
+        }
+        save(updated)
+    }
+
+    func resolveCategory(reviewID: String) {
+        guard let index = items.firstIndex(where: { $0.id == reviewID }) else { return }
+        var updated = items
+        updated[index].needsCategoryReview = false
         if updated[index].candidates.isEmpty { updated.remove(at: index) }
         save(updated)
     }

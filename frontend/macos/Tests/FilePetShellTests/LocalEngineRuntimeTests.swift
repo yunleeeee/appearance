@@ -104,7 +104,8 @@ final class LocalEngineRuntimeTests: XCTestCase {
         let completed = try await finishedJob(client: client, id: accepted.jobID)
         XCTAssertEqual(completed.status, "completed")
         XCTAssertEqual(completed.result?.deadlines.count, 1)
-        XCTAssertEqual(completed.result?.deadlines.first?.project, "软件工程")
+        XCTAssertEqual(completed.result?.categoryID, "learning")
+        XCTAssertEqual(completed.result?.deadlines.first?.project, completed.result?.categoryLabel)
         XCTAssertEqual(completed.result?.deadlines.first?.dueTime, "23:59")
         XCTAssertEqual(try Data(contentsOf: file), original)
 

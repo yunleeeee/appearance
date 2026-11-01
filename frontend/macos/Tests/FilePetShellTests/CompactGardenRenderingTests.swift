@@ -68,6 +68,25 @@ final class CompactGardenRenderingTests: XCTestCase {
         }
     }
 
+    func testDenseGrapeClustersFormAHangingTaperInsteadOfRectangularRows() {
+        for count in [13, 20, 31, 64, 100] {
+            let grapes = CompactGrapeLayout.berries(count: count)
+            XCTAssertEqual(grapes.count, count)
+            let bands = Dictionary(grouping: grapes, by: \.row)
+            let counts = bands.keys.sorted().map { bands[$0]!.count }
+            XCTAssertGreaterThan(counts.count, 3)
+            XCTAssertGreaterThan(counts.first ?? 0, counts.last ?? 0,
+                                 "The upper shoulder should be wider than the tail")
+            XCTAssertTrue(grapes.allSatisfy {
+                $0.center.x - $0.size.width / 2 >= 0 &&
+                $0.center.x + $0.size.width / 2 <= 64 &&
+                $0.center.y - $0.size.height / 2 >= 0 &&
+                $0.center.y + $0.size.height / 2 <= 88
+            })
+        }
+        XCTAssertTrue(CompactGrapeLayout.berries(count: 0).isEmpty)
+    }
+
     func testRuntimeAnchorsMatchTheConfirmedSourceCropAndKeepExtraCategoriesOnscreen() {
         XCTAssertEqual(CompactGardenLayout.size, CoreSize(width: 400, height: 292))
         // The design's three source bunch centres, transformed from the supplied
@@ -121,9 +140,11 @@ final class CompactGardenRenderingTests: XCTestCase {
         guard ProcessInfo.processInfo.environment["FILEPET_RENDER_COMPACT"] == "1" else {
             throw XCTSkip("Set FILEPET_RENDER_COMPACT=1 to export native compact garden proofs")
         }
-        let output = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent(".tmp/compact-qa", isDirectory: true)
+        let output = ProcessInfo.processInfo.environment["FILEPET_COMPACT_PROOF_DIR"]
+            .map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+                .deletingLastPathComponent().deletingLastPathComponent()
+                .appendingPathComponent(".tmp/compact-qa", isDirectory: true)
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         let cases: [(String, [VineBranch], Bool, Bool, Bool)] = [
             ("empty-dark", [], false, false, true),

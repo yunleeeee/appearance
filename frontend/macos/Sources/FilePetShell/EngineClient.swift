@@ -77,11 +77,18 @@ struct EngineDeadline: Codable, Equatable, Sendable, Identifiable {
     let yearInferred: Bool
     let evidence: String
     var signal: String? = nil
+    var status: String? = nil
+    var confirmationRequired: Bool? = nil
+    var sourcePath: String? = nil
 
-    var requiresConfirmation: Bool { signal == "ocr_deadline" }
+    var requiresConfirmation: Bool {
+        confirmationRequired == true || yearInferred || signal == "ocr_deadline"
+    }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, project, evidence, signal
+        case id, title, project, evidence, signal, status
+        case confirmationRequired = "confirmation_required"
+        case sourcePath = "source_path"
         case dueDate = "due_date"
         case dueTime = "due_time"
         case yearInferred = "year_inferred"

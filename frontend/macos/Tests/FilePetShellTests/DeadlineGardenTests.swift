@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class DeadlineGardenTests: XCTestCase {
-    func testMultipleDeadlinesUseThreeVisibleSlotsAndFIFOQueue() {
+    func testMultipleDeadlinesUseThreeUrgentVisibleSlots() {
         let (defaults, suite) = isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
         let garden = DeadlineGarden(defaults: defaults)
@@ -12,7 +12,7 @@ final class DeadlineGardenTests: XCTestCase {
         let candidates = (1...5).map { deadline("ddl-\($0)", day: 10 - $0) }
 
         XCTAssertEqual(garden.feed(candidates + [candidates[0], deadline("")], now: fedAt), 5)
-        XCTAssertEqual(garden.visibleDeadlines.map(\.id), ["ddl-1", "ddl-2", "ddl-3"])
+        XCTAssertEqual(garden.visibleDeadlines.map(\.id), ["ddl-5", "ddl-4", "ddl-3"])
         XCTAssertEqual(garden.queuedCount, 2)
         XCTAssertEqual(garden.activeDeadlines.count, 5)
         XCTAssertEqual(garden.deadlines.map(\.createdAt), Array(repeating: fedAt, count: 5))
