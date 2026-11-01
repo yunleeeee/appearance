@@ -167,7 +167,8 @@ enum DeadlineFlowerMotion {
     }
 
     static func geometry(bounds: NSRect, artwork: CompactFlowerArtwork, stage: DeadlineStage,
-                         stem: CGFloat, head: CGFloat) -> (root: NSPoint, calyx: NSPoint, rect: NSRect)? {
+                         stem: CGFloat, head: CGFloat, crownScale: CGFloat = 1)
+                         -> (root: NSPoint, calyx: NSPoint, rect: NSRect)? {
         guard heads.count == 6 else { return nil }
         let i = stage.rawValue
         let sprite = heads[i]
@@ -175,24 +176,27 @@ enum DeadlineFlowerMotion {
         // Root remains fixed. Upper stem responds before head; calyx remains attached.
         // Keep every approved stage crown inside the compact NSPanel. The
         // calyx remains the stem/head joint even as petals expand or droop.
-        let requiredCrownRoom = calyxOffsets[i].1 + sprite.anchorY
+        let scale = max(0.5, min(1, crownScale))
+        let requiredCrownRoom = (calyxOffsets[i].1 + sprite.anchorY) * scale
         let y = max(30, min(bounds.height * 0.74,
                             bounds.height - 8 - requiredCrownRoom))
         let calyx = NSPoint(x: root.x + head * 2.4, y: y)
         let dx = calyxOffsets[i].0, dy = calyxOffsets[i].1
         let heart = NSPoint(x: calyx.x - dx, y: calyx.y + dy)
-        let rect = NSRect(x: heart.x - sprite.anchorX,
-                          y: heart.y - sprite.height + sprite.anchorY,
-                          width: sprite.width, height: sprite.height)
+        // Scale only the blossom around the stem's calyx joint: the root,
+        // stalk, and original leaf sprites are never stretched or moved.
+        let rect = NSRect(x: calyx.x - (dx + sprite.anchorX) * scale,
+                          y: calyx.y + (dy - sprite.height + sprite.anchorY) * scale,
+                          width: sprite.width * scale, height: sprite.height * scale)
         return (root, calyx, rect)
     }
 
     @discardableResult
     static func draw(bounds: NSRect, artwork: CompactFlowerArtwork, stage: DeadlineStage,
                      stem: CGFloat, head: CGFloat,
-                     petals: (CGFloat, CGFloat, CGFloat)) -> Bool {
+                     petals: (CGFloat, CGFloat, CGFloat), crownScale: CGFloat = 1) -> Bool {
         guard let g = geometry(bounds: bounds, artwork: artwork, stage: stage,
-                               stem: stem, head: head) else { return false }
+                               stem: stem, head: head, crownScale: crownScale) else { return false }
         NSGraphicsContext.current?.imageInterpolation = .none
         let path = NSBezierPath()
         path.move(to: g.root)
@@ -221,8 +225,9 @@ enum DeadlineFlowerMotion {
         if stage == .bloom {
             // Three overlapping petal sectors share one anchored core but follow
             // slightly different time delays (170/200/235 ms). No sprite stretch.
-            let heart = CGPoint(x: g.rect.minX + sprite.anchorX,
-                                y: g.rect.maxY - sprite.anchorY)
+            let renderScale = g.rect.width / sprite.width
+            let heart = CGPoint(x: g.rect.minX + sprite.anchorX * renderScale,
+                                y: g.rect.maxY - sprite.anchorY * renderScale)
             let groups: [(CGFloat, CGFloat, CGFloat, CGFloat)] = [
                 (210, 330, petals.0, -1), (-30, 90, petals.1, 1),
                 (90, 210, petals.2, -1)
@@ -239,8 +244,8 @@ enum DeadlineFlowerMotion {
                 for step in 0...28 {
                     let degrees = group.0 - 10 + (group.1 - group.0 + 20) * CGFloat(step) / 28
                     let theta = degrees * .pi / 180
-                    path.addLine(to: CGPoint(x: heart.x + cos(theta) * 36,
-                                             y: heart.y + sin(theta) * 36))
+                    path.addLine(to: CGPoint(x: heart.x + cos(theta) * 36 * renderScale,
+                                             y: heart.y + sin(theta) * 36 * renderScale))
                 }
                 path.closeSubpath()
                 context.addPath(path)
@@ -250,8 +255,9 @@ enum DeadlineFlowerMotion {
             }
             // Retain the approved atlas core, concealing joints between petals.
             context.saveGState()
-            context.clip(to: CGRect(x: heart.x - 5.5, y: heart.y - 5.5,
-                                    width: 11, height: 11))
+            context.clip(to: CGRect(x: heart.x - 5.5 * renderScale,
+                                    y: heart.y - 5.5 * renderScale,
+                                    width: 11 * renderScale, height: 11 * renderScale))
             sprite.image.draw(in: g.rect, from: .zero, operation: .sourceOver, fraction: 1)
             context.restoreGState()
         } else {
@@ -261,9 +267,10 @@ enum DeadlineFlowerMotion {
     }
 
     static func hit(_ point: NSPoint, bounds: NSRect, artwork: CompactFlowerArtwork,
-                    stage: DeadlineStage, stem: CGFloat, head: CGFloat) -> Bool {
+                    stage: DeadlineStage, stem: CGFloat, head: CGFloat,
+                    crownScale: CGFloat = 1) -> Bool {
         guard let g = geometry(bounds: bounds, artwork: artwork, stage: stage,
-                               stem: stem, head: head) else { return false }
+                               stem: stem, head: head, crownScale: crownScale) else { return false }
         if heads[stage.rawValue].contains(point, in: g.rect) { return true }
         if let sprite = leaf {
             for joint in leaves(bounds: bounds, artwork: artwork, stage: stage,
