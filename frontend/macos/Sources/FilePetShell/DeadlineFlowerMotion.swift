@@ -202,8 +202,10 @@ enum DeadlineFlowerMotion {
         }
         // A few muted pixel-sized hints of soil; never a visible hard platform.
         NSColor(calibratedRed: 0.30, green: 0.42, blue: 0.28, alpha: 0.55).setFill()
-        for x in [-16.0, -7.0, 9.0, 19.0] {
-            NSRect(x: root.x + x * cover, y: 0.5, width: 2, height: 1).fill()
+        let soilOffsets: [CGFloat] = [-16, -7, 9, 19]
+        for x in soilOffsets {
+            NSBezierPath(rect: NSRect(x: root.x + x * cover,
+                                      y: 0.5, width: 2, height: 1)).fill()
         }
     }
 
