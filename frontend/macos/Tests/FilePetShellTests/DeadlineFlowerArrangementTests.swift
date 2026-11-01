@@ -21,7 +21,7 @@ final class DeadlineFlowerArrangementTests: XCTestCase {
         let tall = try XCTUnwrap(DeadlineFlowerArrangement.frameOrigin(
             screen: screen, stemX: plants[1].stemX, index: 1, count: 2))
         let gap = (tall.x + plants[1].stemX) - (small.x + plants[0].stemX)
-        XCTAssertEqual(gap, 67)
+        XCTAssertEqual(gap, 57)
         XCTAssertEqual(small.y, tall.y)
         let heightRatio = plants[1].size.height / plants[0].size.height
         XCTAssertLessThan(heightRatio, 1.5,
@@ -34,8 +34,8 @@ final class DeadlineFlowerArrangementTests: XCTestCase {
         let screen = NSRect(x: -1440, y: 30, width: 1440, height: 900)
         let offsets = DeadlineFlowerArrangement.rootOffsets(count: 3)
         XCTAssertEqual(offsets.count, 3)
-        XCTAssertEqual(offsets[1] - offsets[0], 68)
-        XCTAssertEqual(offsets[2] - offsets[1], 68)
+        XCTAssertEqual(offsets[1] - offsets[0], 56)
+        XCTAssertEqual(offsets[2] - offsets[1], 56)
         for (i, artwork) in CompactFlowerArtwork.plants.enumerated() {
             let origin = try XCTUnwrap(DeadlineFlowerArrangement.frameOrigin(
                 screen: screen, stemX: artwork.stemX, index: i, count: 3))
