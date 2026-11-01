@@ -49,6 +49,7 @@ final class DeadlineVisualProofTests: XCTestCase {
             let file = breeze.appendingPathComponent(String(format: "frame-%03d.png", i))
             try imageData(windView).write(to: file)
         }
+        try groupedFlowers(count: 1).write(to: root.appendingPathComponent("one-flower-garden.png"))
         try groupedFlowers(count: 2).write(to: root.appendingPathComponent("two-flower-garden.png"))
         try groupedFlowers(count: 3).write(to: root.appendingPathComponent("three-flower-garden.png"))
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: snapshots.path).count, 6)
@@ -98,7 +99,8 @@ final class DeadlineVisualProofTests: XCTestCase {
             let artwork = CompactFlowerArtwork.plants[index]
             let view = DeadlineFlowerView(artwork: artwork)
             view.crownScale = DeadlineFlowerArrangement.crownScale(index: index, count: count)
-            view.deadlineStage = [.bloom, .opening, .swelling][index]
+            view.plantPose = DeadlineFlowerArrangement.pose(index: index, count: count)
+            view.deadlineStage = count == 1 ? .bloom : [.opening, .bloom, .opening][index]
             let position = try XCTUnwrap(DeadlineFlowerArrangement.frameOrigin(
                 screen: mockScreen, stemX: artwork.stemX, index: index, count: count))
             context.saveGState()
