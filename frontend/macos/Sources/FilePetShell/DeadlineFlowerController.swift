@@ -65,14 +65,24 @@ final class DeadlineFlowerController {
         }
     }
 
-    func reposition() {
+    func reposition(animated: Bool = false) {
         let area = screenFrame()
-        for flower in flowers {
+        let ordered = flowers.sorted { $0.slot < $1.slot }
+        for (index, flower) in ordered.enumerated() {
             let artwork = CompactFlowerArtwork.plants[flower.slot]
-            flower.panel.setFrameOrigin(NSPoint(
-                x: area.maxX - 300 + artwork.rootX - artwork.stemX,
-                y: area.minY
-            ))
+            guard let origin = DeadlineFlowerArrangement.frameOrigin(
+                screen: area, stemX: artwork.stemX,
+                index: index, count: ordered.count) else { continue }
+            if animated && visible && flower.panel.isVisible &&
+                !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.25
+                    context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                    flower.panel.animator().setFrameOrigin(origin)
+                }
+            } else {
+                flower.panel.setFrameOrigin(origin)
+            }
         }
     }
 
@@ -136,7 +146,9 @@ final class DeadlineFlowerController {
         if let id = hoveredID, !desiredIDs.contains(id) { closeDetails() }
         flowers = next
         scheduleStageRefresh()
-        reposition()
+        // Only membership changes move the grouping. Stage refreshes never
+        // restart window animations or shift existing flower identities.
+        reposition(animated: existing.count != next.count)
         for flower in next where existing[flower.deadline.id] == nil {
             guard visible else { continue }
             if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { flower.panel.alphaValue = 0 }
@@ -278,7 +290,7 @@ struct CompactFlowerArtwork {
         }
         let placements: [(CGRect, CGFloat, CGFloat, CGFloat, Int)] = [
             (CGRect(x: 187, y: 350, width: 399, height: 501), 0.165, 34, 395 - 187, 566),
-            (CGRect(x: 677, y: 72, width: 485, height: 779), 0.187, 131, 873 - 677, 448),
+            (CGRect(x: 677, y: 72, width: 485, height: 779), 0.150, 131, 873 - 677, 448),
             (CGRect(x: 1296, y: 340, width: 401, height: 511), 0.175, 246, 1493 - 1296, 660),
         ]
         return placements.map { crop, scale, rootX, stemX, foliageStart in
