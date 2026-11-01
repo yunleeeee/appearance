@@ -71,6 +71,8 @@ final class DeadlineFlowerController {
         for (index, flower) in ordered.enumerated() {
             flower.view.crownScale = DeadlineFlowerArrangement.crownScale(
                 index: index, count: ordered.count)
+            flower.view.plantPose = DeadlineFlowerArrangement.pose(
+                index: index, count: ordered.count)
             let artwork = CompactFlowerArtwork.plants[flower.slot]
             guard let origin = DeadlineFlowerArrangement.frameOrigin(
                 screen: area, stemX: artwork.stemX,
@@ -347,6 +349,9 @@ final class DeadlineFlowerView: NSView {
     var crownScale: CGFloat = 1 {
         didSet { if oldValue != crownScale { needsDisplay = true } }
     }
+    var plantPose: DeadlineFlowerArrangement.PlantPose = .solo {
+        didSet { if oldValue != plantPose { needsDisplay = true } }
+    }
     var reduceMotionOverride: Bool?
     private var reduceMotion: Bool {
         reduceMotionOverride ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -443,18 +448,18 @@ final class DeadlineFlowerView: NSView {
                     ?? Date().timeIntervalSince(transitionStart ?? Date())
                 // Calyx-anchored upward reveal, no blurry full-flower crossfade.
                 _ = DeadlineFlowerMotion.draw(bounds: bounds, artwork: artwork, stage: previousStage,
-                    stem: stem, head: head, petals: petals, crownScale: crownScale)
+                    stem: stem, head: head, petals: petals, crownScale: crownScale, pose: plantPose)
                 let portion = min(1, max(0, elapsed / 0.34))
                 let context = NSGraphicsContext.current?.cgContext
                 context?.saveGState()
                 context?.clip(to: CGRect(x: 0, y: bounds.height * (0.35 + 0.65 * (1 - portion)),
                                          width: bounds.width, height: bounds.height * portion))
                 _ = DeadlineFlowerMotion.draw(bounds: bounds, artwork: artwork, stage: stage,
-                    stem: stem, head: head, petals: petals, crownScale: crownScale)
+                    stem: stem, head: head, petals: petals, crownScale: crownScale, pose: plantPose)
                 context?.restoreGState()
             } else {
                 _ = DeadlineFlowerMotion.draw(bounds: bounds, artwork: artwork, stage: stage,
-                    stem: stem, head: head, petals: petals, crownScale: crownScale)
+                    stem: stem, head: head, petals: petals, crownScale: crownScale, pose: plantPose)
             }
             return
         }
@@ -466,7 +471,7 @@ final class DeadlineFlowerView: NSView {
         if let stage = deadlineStage, DeadlineFlowerMotion.heads.count == 6 {
             return DeadlineFlowerMotion.hit(point, bounds: bounds, artwork: artwork,
                 stage: stage, stem: force(lag: 0), head: force(lag: 0.115),
-                crownScale: crownScale)
+                crownScale: crownScale, pose: plantPose)
         }
         let x = min(artwork.image.width - 1, Int(point.x / bounds.width * CGFloat(artwork.image.width)))
         let y = min(artwork.image.height - 1, Int((bounds.height - point.y) / bounds.height * CGFloat(artwork.image.height)))
