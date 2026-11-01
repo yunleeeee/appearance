@@ -48,6 +48,42 @@ final class DeadlineFlowerArrangementTests: XCTestCase {
         }
     }
 
+    func testOnlyPairedLeftBlossomShrinksAndCalyxRemainsAttached() throws {
+        XCTAssertEqual(DeadlineFlowerArrangement.crownScale(index: 0, count: 1), 1)
+        XCTAssertEqual(DeadlineFlowerArrangement.crownScale(index: 0, count: 2), 0.68)
+        XCTAssertEqual(DeadlineFlowerArrangement.crownScale(index: 1, count: 2), 1)
+        XCTAssertEqual(DeadlineFlowerArrangement.crownScale(index: 0, count: 3), 1)
+        XCTAssertEqual(DeadlineFlowerArrangement.crownScale(index: 1, count: 3), 1)
+
+        let left = CompactFlowerArtwork.plants[0]
+        let right = CompactFlowerArtwork.plants[1]
+        let unscaled = try XCTUnwrap(DeadlineFlowerMotion.geometry(
+            bounds: NSRect(origin: .zero, size: left.size), artwork: left,
+            stage: .bloom, stem: 0, head: 0))
+        let scaled = try XCTUnwrap(DeadlineFlowerMotion.geometry(
+            bounds: NSRect(origin: .zero, size: left.size), artwork: left,
+            stage: .bloom, stem: 0, head: 0,
+            crownScale: DeadlineFlowerArrangement.crownScale(index: 0, count: 2)))
+        let neighbor = try XCTUnwrap(DeadlineFlowerMotion.geometry(
+            bounds: NSRect(origin: .zero, size: right.size), artwork: right,
+            stage: .opening, stem: 0, head: 0))
+
+        XCTAssertEqual(unscaled.root, scaled.root)
+        XCTAssertEqual(unscaled.calyx, scaled.calyx,
+            "Do not break the calyx/stem joint when reducing the blossom")
+        XCTAssertEqual(scaled.rect.width / unscaled.rect.width, 0.68, accuracy: 0.001)
+        XCTAssertLessThan(scaled.rect.width, neighbor.rect.width,
+            "The left bloom must not visually dominate the right opening flower")
+        XCTAssertGreaterThan(scaled.rect.width, neighbor.rect.width * 0.8,
+            "Do not make the left bloom unnaturally tiny")
+
+        let leftView = DeadlineFlowerView(artwork: left)
+        leftView.deadlineStage = .bloom
+        leftView.crownScale = 0.68
+        XCTAssertFalse(leftView.containsArtwork(NSPoint(x: 1, y: 1)),
+            "The large transparent panel must still let clicks through")
+    }
+
     func testUnsupportedCountsDoNotInventExtraWindows() {
         XCTAssertTrue(DeadlineFlowerArrangement.rootOffsets(count: 0).isEmpty)
         XCTAssertTrue(DeadlineFlowerArrangement.rootOffsets(count: 4).isEmpty)
