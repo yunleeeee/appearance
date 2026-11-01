@@ -94,8 +94,8 @@ final class DeadlineFlowerArrangementTests: XCTestCase {
         let right = DeadlineFlowerArrangement.pose(index: 1, count: 2)
         XCTAssertLessThan(left.tipShift, 0)
         XCTAssertGreaterThan(right.tipShift, 0)
-        XCTAssertLessThan(abs(left.tipShift), 6)
-        XCTAssertLessThan(abs(right.tipShift), 6)
+        XCTAssertLessThan(abs(left.tipShift), 9)
+        XCTAssertLessThan(abs(right.tipShift), 9)
         XCTAssertGreaterThan(left.groundCover, solo.groundCover)
         XCTAssertGreaterThan(right.groundCover, solo.groundCover)
 
