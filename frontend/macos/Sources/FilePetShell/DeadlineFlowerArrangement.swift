@@ -14,6 +14,13 @@ enum DeadlineFlowerArrangement {
         }
     }
 
+    /// In a two-flower composition a fully-bloomed left crown was visually
+    /// larger than the opening right crown. Reduce only the left blossom,
+    /// preserving the planted stem, leaves, NSPanel size, and hit geometry.
+    static func crownScale(index: Int, count: Int) -> CGFloat {
+        count == 2 && index == 0 ? 0.68 : 1
+    }
+
     static func frameOrigin(screen: NSRect, stemX: CGFloat,
                             index: Int, count: Int) -> NSPoint? {
         let offsets = rootOffsets(count: count)
