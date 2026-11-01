@@ -97,6 +97,7 @@ final class DeadlineVisualProofTests: XCTestCase {
         for index in 0..<count {
             let artwork = CompactFlowerArtwork.plants[index]
             let view = DeadlineFlowerView(artwork: artwork)
+            view.crownScale = DeadlineFlowerArrangement.crownScale(index: index, count: count)
             view.deadlineStage = [.bloom, .opening, .swelling][index]
             let position = try XCTUnwrap(DeadlineFlowerArrangement.frameOrigin(
                 screen: mockScreen, stemX: artwork.stemX, index: index, count: count))
