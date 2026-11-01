@@ -49,6 +49,8 @@ final class DeadlineVisualProofTests: XCTestCase {
             let file = breeze.appendingPathComponent(String(format: "frame-%03d.png", i))
             try imageData(windView).write(to: file)
         }
+        try groupedFlowers(count: 2).write(to: root.appendingPathComponent("two-flower-garden.png"))
+        try groupedFlowers(count: 3).write(to: root.appendingPathComponent("three-flower-garden.png"))
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: snapshots.path).count, 6)
     }
 
@@ -75,6 +77,37 @@ final class DeadlineVisualProofTests: XCTestCase {
         view.previewWindAge = 1.27
         let recovery = try imageData(view)
         XCTAssertNotEqual(pushed, recovery, "Preview movie must contain real rendered motion")
+    }
+
+    private func groupedFlowers(count: Int) throws -> Data {
+        // Native stage sprites and actual layout offsets share a ground line.
+        let width = 900, height = 440
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: width * 4, bitsPerPixel: 32))
+        let graphics = try XCTUnwrap(NSGraphicsContext(bitmapImageRep: bitmap))
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = graphics
+        let context = graphics.cgContext
+        context.setFillColor(NSColor(calibratedRed: 0.055, green: 0.085, blue: 0.115, alpha: 1).cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        context.scaleBy(x: 2, y: 2)
+        let mockScreen = NSRect(x: 0, y: 0, width: 450, height: 220)
+        for index in 0..<count {
+            let artwork = CompactFlowerArtwork.plants[index]
+            let view = DeadlineFlowerView(artwork: artwork)
+            view.deadlineStage = [.bloom, .opening, .swelling][index]
+            let position = try XCTUnwrap(DeadlineFlowerArrangement.frameOrigin(
+                screen: mockScreen, stemX: artwork.stemX, index: index, count: count))
+            context.saveGState()
+            context.translateBy(x: position.x, y: position.y)
+            view.draw(view.bounds)
+            context.restoreGState()
+        }
+        graphics.flushGraphics()
+        NSGraphicsContext.restoreGraphicsState()
+        return try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
     }
 
     private func imageData(_ view: DeadlineFlowerView) throws -> Data {
