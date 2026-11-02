@@ -10,6 +10,7 @@ struct PendingFileReview: Identifiable, Codable, Equatable {
     var candidates: [EngineDeadline]
     let createdAt: Date
     var needsCategoryReview: Bool? = nil
+    var contentFingerprint: String? = nil
 }
 
 @MainActor
@@ -46,7 +47,8 @@ final class FileReviewInbox: ObservableObject {
         let review = PendingFileReview(id: path, path: path, fileName: result.fileName,
             reason: reason, candidates: proposed,
             createdAt: previous?.createdAt ?? Date(),
-            needsCategoryReview: needsCategoryReview ?? (result.status != "classified"))
+            needsCategoryReview: needsCategoryReview ?? (result.status != "classified"),
+            contentFingerprint: result.contentFingerprint ?? previous?.contentFingerprint)
         var updated = items
         if let index = updated.firstIndex(where: { $0.id == path }) { updated[index] = review }
         else { updated.append(review) }
