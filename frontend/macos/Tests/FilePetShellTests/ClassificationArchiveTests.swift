@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class ClassificationArchiveTests: XCTestCase {
-    func testUserChosenDestinationCopiesFileWithoutTouchingOriginalOrReplacingExistingFile() async throws {
+    func testVerifiedMoveKeepsOnlyDestinationAndPreservesOtherFiles() async throws {
         let (root, archive, defaults, suite) = try fixture()
         defer { defaults.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: root) }
         let input = root.appendingPathComponent("source", isDirectory: true)
@@ -22,14 +22,14 @@ final class ClassificationArchiveTests: XCTestCase {
         archive.selectDestination(output)
         let first = try await archive.copyClassifiedFile(
             source: file, categoryID: "learning", categoryLabel: "课程与学习")
-        guard case .copied(let firstPath) = first else { return XCTFail("Expected a new copy") }
+        guard case .moved(let firstPath) = first else { return XCTFail("Expected a verified move") }
         XCTAssertEqual(URL(fileURLWithPath: firstPath).deletingLastPathComponent().lastPathComponent, "课程与学习")
         XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: firstPath)), original)
-        XCTAssertEqual(try Data(contentsOf: file), original)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path), "Original must disappear after verified move")
 
         let duplicate = try await archive.copyClassifiedFile(
             source: file, categoryID: "learning", categoryLabel: "课程与学习")
-        XCTAssertEqual(duplicate, .alreadyCopied(firstPath))
+        XCTAssertEqual(duplicate, .alreadyStored(firstPath))
 
         // Another physical file with the same name must not overwrite it.
         let other = root.appendingPathComponent("other", isDirectory: true)
@@ -38,18 +38,19 @@ final class ClassificationArchiveTests: XCTestCase {
         try Data("independent".utf8).write(to: colliding)
         let second = try await archive.copyClassifiedFile(
             source: colliding, categoryID: "learning", categoryLabel: "课程与学习")
-        guard case .copied(let secondPath) = second else { return XCTFail("Expected collision-safe copy") }
+        guard case .moved(let secondPath) = second else { return XCTFail("Expected collision-safe move") }
         XCTAssertNotEqual(firstPath, secondPath)
         XCTAssertTrue(secondPath.hasSuffix("report (2).txt"))
         XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: firstPath)), original)
         XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: secondPath)), Data("independent".utf8))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: colliding.path))
 
         // A new ShellStore uses the persisted destination and copy receipts.
         let restored = ClassificationArchive(defaults: UserDefaults(suiteName: suite)!)
         XCTAssertEqual(restored.destination, output.standardizedFileURL)
         let persistedCopy = try await restored.copyClassifiedFile(
             source: file, categoryID: "learning", categoryLabel: "课程与学习")
-        XCTAssertEqual(persistedCopy, .alreadyCopied(firstPath))
+        XCTAssertEqual(persistedCopy, .alreadyStored(firstPath))
     }
 
     func testInvalidCategoryCannotEscapeDestinationAndDisableStopsCopying() async throws {
@@ -62,10 +63,10 @@ final class ClassificationArchiveTests: XCTestCase {
         archive.selectDestination(destination)
         let receipt = try await archive.copyClassifiedFile(
             source: source, categoryID: "../escape", categoryLabel: "../private")
-        guard case .copied(let path) = receipt else { return XCTFail("Expected safe filename") }
+        guard case .moved(let path) = receipt else { return XCTFail("Expected safe filename") }
         XCTAssertTrue(path.hasPrefix(destination.path + "/"))
         XCTAssertFalse(path.contains("/../"))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: source.path))
         archive.selectDestination(nil)
         XCTAssertNil(archive.destination)
         let disabled = try await archive.copyClassifiedFile(
@@ -83,7 +84,7 @@ final class ClassificationArchiveTests: XCTestCase {
         archive.selectDestination(root)
         let preSorted = try await archive.copyClassifiedFile(
             source: source, categoryID: "learning", categoryLabel: "学习")
-        XCTAssertEqual(preSorted, .alreadyCopied(source.path))
+        XCTAssertEqual(preSorted, .alreadyStored(source.path))
     }
 
     private func fixture() throws -> (URL, ClassificationArchive, UserDefaults, String) {
