@@ -41,7 +41,19 @@ final class ClassificationArchiveTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(
             atPath: output.appendingPathComponent("课程与学习/report (2).txt").path))
 
-        // Another physical file with the same name must not overwrite it.
+        // An identical screenshot copied from another source folder is one
+        // logical image; retain one verified destination file, not " (2)".
+        let twinFolder = root.appendingPathComponent("twin")
+        try FileManager.default.createDirectory(at: twinFolder, withIntermediateDirectories: true)
+        let twin = twinFolder.appendingPathComponent("report.txt")
+        try original.write(to: twin)
+        let identical = try await archive.copyClassifiedFile(
+            source: twin, categoryID: "learning", categoryLabel: "课程与学习")
+        XCTAssertEqual(identical, .moved(firstPath))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: twin.path))
+
+        // Another physical file with the same name but distinct bytes
+        // must not overwrite it.
         let other = root.appendingPathComponent("other", isDirectory: true)
         try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
         let colliding = other.appendingPathComponent("report.txt")
