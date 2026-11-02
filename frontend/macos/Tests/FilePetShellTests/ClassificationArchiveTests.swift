@@ -117,6 +117,27 @@ final class ClassificationArchiveTests: XCTestCase {
             atPath: newPath.deletingLastPathComponent().path).count, 1)
     }
 
+    func testSymlinkSourceNeverDeletesItsTarget() async throws {
+        let (root, archive, defaults, suite) = try fixture()
+        defer { defaults.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: root) }
+        let original = root.appendingPathComponent("protected-original.png")
+        let data = Data([5, 6, 7, 8])
+        try data.write(to: original)
+        let shortcut = root.appendingPathComponent("shortcut.png")
+        try FileManager.default.createSymbolicLink(at: shortcut, withDestinationURL: original)
+        let output = root.appendingPathComponent("archive")
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        archive.selectDestination(output)
+        do {
+            _ = try await archive.copyClassifiedFile(
+                source: shortcut, categoryID: "learning", categoryLabel: "学习")
+            XCTFail("A symlink must not trigger removal of the pointed-to file")
+        } catch {
+            XCTAssertEqual(try Data(contentsOf: original), data)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: shortcut.path))
+        }
+    }
+
     func testUnwritableOrMissingTargetDoesNotDeleteOriginal() async throws {
         let (root, archive, defaults, suite) = try fixture()
         defer { defaults.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: root) }
