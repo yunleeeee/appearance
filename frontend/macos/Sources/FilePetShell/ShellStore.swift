@@ -256,8 +256,15 @@ final class ShellStore: ObservableObject {
                             }
                             if newPath { defaults.set(classifiedPaths.sorted(), forKey: pathsKey) }
                             do {
+                                let isGeneratedScreenshot =
+                                    FileDisplayName.label(url.lastPathComponent) != url.lastPathComponent
+                                let title = result.deadlines.first {
+                                    !needsDeadlineReview($0, result: result)
+                                        && $0.titleInferred != true
+                                }?.title
                                 switch try await archive.copyClassifiedFile(
-                                    source: url, categoryID: category, categoryLabel: resolved) {
+                                    source: url, categoryID: category, categoryLabel: resolved,
+                                    preferredName: isGeneratedScreenshot ? title : nil) {
                                 case .notConfigured:
                                     break // User has not opted in to a destination.
                                 case .moved(let path):
