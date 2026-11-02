@@ -13,7 +13,8 @@ struct ShellFileResult: Identifiable, Equatable {
 }
 
 /// UI orchestration only: the service owns every classification decision.
-/// This adapter never extracts file contents or copies/moves the original.
+/// This adapter never extracts file contents; optional local archiving
+/// moves only already classified originals after verified destination writes.
 @MainActor
 final class ShellStore: ObservableObject {
     @Published private(set) var status = "把文件投给葡萄藤，或先预览动画"
@@ -239,6 +240,7 @@ final class ShellStore: ObservableObject {
                         var label: String?
                         var newGrape = false
                         var archiveSummary = ""
+                        var relocatedPath: String?
                         let fingerprint = result.contentFingerprint.flatMap { $0.isEmpty ? nil : $0 }
                         let duplicateContent = fingerprint.map { imageFingerprints.contains($0) } ?? false
                         if result.status == "classified", let category = result.categoryID, !category.isEmpty {
@@ -258,19 +260,25 @@ final class ShellStore: ObservableObject {
                                     source: url, categoryID: category, categoryLabel: resolved) {
                                 case .notConfigured:
                                     break // User has not opted in to a destination.
-                                case .copied(let path):
-                                    archiveSummary = "；已复制至" + URL(fileURLWithPath: path).deletingLastPathComponent().lastPathComponent
-                                case .alreadyCopied:
-                                    archiveSummary = "；归档文件已存在"
+                                case .moved(let path):
+                                    relocatedPath = path
+                                    archiveSummary = "；已移动至" + URL(fileURLWithPath: path).deletingLastPathComponent().lastPathComponent
+                                case .alreadyStored(let path):
+                                    relocatedPath = path
+                                    archiveSummary = "；文件已归档"
                                 }
                             } catch {
-                                // Preserve the successful classification. Copy errors
-                                // must never remove or modify the original file.
+                                // Classification remains valid even when moving fails.
+                                // The original is kept on any failed verification.
                                 archiveSummary = "；归档失败：" + error.localizedDescription
                             }
                         }
                         let accepted = result.deadlines.filter {
                             !needsDeadlineReview($0, result: result)
+                        }.map { candidate -> EngineDeadline in
+                            var item = candidate
+                            if let relocatedPath { item.sourcePath = relocatedPath }
+                            return item
                         }
                         let added = garden.feed(accepted)
                         // Users upgrading from mandatory-OCR-review mode should not
@@ -288,6 +296,10 @@ final class ShellStore: ObservableObject {
                                 return !knownSemanticKeys.contains(key) && !pendingKeys.contains(key)
                             }
                             return true
+                        }.map { candidate -> EngineDeadline in
+                            var item = candidate
+                            if let relocatedPath { item.sourcePath = relocatedPath }
+                            return item
                         }
                         if let fingerprint, label != nil {
                             if imageFingerprints.insert(fingerprint).inserted {
@@ -306,6 +318,12 @@ final class ShellStore: ObservableObject {
                         } else if reviewInbox.items.first(where: { $0.id == identity }) == nil {
                             // A re-feed must not discard an existing unconfirmed OCR candidate.
                             reviewInbox.remove(id: identity)
+                        }
+                        if let relocatedPath, relocatedPath != identity {
+                            classifiedPaths.insert(relocatedPath)
+                            defaults.set(classifiedPaths.sorted(), forKey: pathsKey)
+                            garden.relinkSource(from: identity, to: relocatedPath)
+                            reviewInbox.relinkSource(from: identity, to: relocatedPath)
                         }
                         let outcome: ShellFileResult.Outcome
                         if categoryPending || !toReview.isEmpty { outcome = .needsReview }
@@ -411,7 +429,16 @@ final class ShellStore: ObservableObject {
                 do {
                     let receipt = try await self.archive.copyClassifiedFile(
                         source: source, categoryID: categoryID, categoryLabel: label)
-                    if case .copied = receipt { self.status = "已复制分类文件至“\(label)”" }
+                    switch receipt {
+                    case .moved(let path), .alreadyStored(let path):
+                        self.garden.relinkSource(from: review.path, to: path)
+                        self.reviewInbox.relinkSource(from: review.path, to: path)
+                        self.classifiedPaths.insert(path)
+                        self.defaults.set(self.classifiedPaths.sorted(), forKey: self.pathsKey)
+                        self.status = "已移动分类文件至“\(label)”"
+                    case .notConfigured:
+                        break
+                    }
                 } catch {
                     self.status = "已确认分类；归档失败（原件未改动）：" + error.localizedDescription
                 }
