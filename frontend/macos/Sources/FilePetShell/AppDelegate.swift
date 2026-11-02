@@ -180,7 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         archive.target = self
         commands.addItem(archive)
         applicationArchiveLocationMenuItem = archive
-        let disableArchive = NSMenuItem(title: "停止自动复制归档", action: #selector(disableArchive), keyEquivalent: "")
+        let disableArchive = NSMenuItem(title: "停止自动移动归档", action: #selector(disableArchive), keyEquivalent: "")
         disableArchive.target = self
         commands.addItem(disableArchive)
         let reviews = NSMenuItem(title: pendingReviewMenuTitle, action: #selector(showPendingReviews), keyEquivalent: "")
@@ -243,7 +243,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         archive.target = self
         menu.addItem(archive)
         archiveLocationMenuItem = archive
-        let disableArchive = NSMenuItem(title: "停止自动复制归档", action: #selector(disableArchive), keyEquivalent: "")
+        let disableArchive = NSMenuItem(title: "停止自动移动归档", action: #selector(disableArchive), keyEquivalent: "")
         disableArchive.target = self
         menu.addItem(disableArchive)
         let reviews = NSMenuItem(title: pendingReviewMenuTitle, action: #selector(showPendingReviews), keyEquivalent: "")
@@ -405,7 +405,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func chooseArchiveFolder() {
         let panel = NSOpenPanel()
         panel.title = "分类文件保存位置"
-        panel.message = "分类成功后复制至此目录下的类别文件夹；原始文件保持不变。"
+        panel.message = "分类成功后将文件移动至类别文件夹。仅在写入并校验成功后才删除原位置的文件。"
         panel.prompt = "使用此文件夹"
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
