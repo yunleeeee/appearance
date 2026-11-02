@@ -34,8 +34,13 @@ final class FileReviewInbox: ObservableObject {
         let path = URL(fileURLWithPath: result.path).standardizedFileURL.path
         let previous = items.first { $0.id == path }
         let incoming = candidates ?? result.deadlines
-        // Refeeding the same source cannot silently erase its unresolved candidates.
-        let proposed = incoming.isEmpty ? (previous?.candidates ?? []) : incoming
+        // Refeeding the same source must never erase earlier unresolved OCR
+        // candidates when another DDL becomes recognizable on a later pass.
+        var known = Set<String>()
+        let proposed = ((previous?.candidates ?? []) + incoming).filter { candidate in
+            let key = candidate.semanticKey ?? candidate.id
+            return known.insert(key).inserted
+        }
         let reason = proposed.contains(where: \.requiresConfirmation)
             ? "图片中的截止日期需要核对，请确认内容、时间和项目。" : result.reason
         let review = PendingFileReview(id: path, path: path, fileName: result.fileName,
