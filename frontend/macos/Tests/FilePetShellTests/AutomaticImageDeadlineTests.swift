@@ -10,7 +10,7 @@ final class AutomaticImageDeadlineTests: XCTestCase {
         let engine = AutomaticDeadlineEngine(results: [
             response(deadlines: [deadline("auto-1", key: "task-1")])
         ])
-        let store = store(engine, defaults: defaults)
+        let store = makeStore(engine, defaults: defaults)
         XCTAssertTrue(store.autoAcceptImageDeadlines)
         store.classifyFiles([image("assignment.png")])
         await store.waitUntilIdle()
@@ -24,7 +24,7 @@ final class AutomaticImageDeadlineTests: XCTestCase {
         let (defaults, suite) = isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
         let candidate = deadline("auto-2", key: "task-2")
-        let store = store(AutomaticDeadlineEngine(results: [
+        let store = makeStore(AutomaticDeadlineEngine(results: [
             response(deadlines: [candidate]),
             response(deadlines: [candidate])
         ]), defaults: defaults)
@@ -44,7 +44,7 @@ final class AutomaticImageDeadlineTests: XCTestCase {
             "Do not leave an old OCR review after accepting the same candidate automatically")
         XCTAssertEqual(store.vine.totalGrapes, 1)
 
-        let restarted = store(AutomaticDeadlineEngine(results: []),
+        let restarted = makeStore(AutomaticDeadlineEngine(results: []),
                               defaults: UserDefaults(suiteName: suite)!)
         XCTAssertTrue(restarted.autoAcceptImageDeadlines)
         XCTAssertEqual(restarted.garden.deadlines.count, 1)
@@ -57,7 +57,7 @@ final class AutomaticImageDeadlineTests: XCTestCase {
         // Mimic a backend which insists on manual review for inferred years.
         uncertain.confirmationRequired = true
         uncertain.reliability = "low"
-        let store = store(AutomaticDeadlineEngine(results: [
+        let store = makeStore(AutomaticDeadlineEngine(results: [
             response(deadlines: [uncertain])
         ]), defaults: defaults)
         store.classifyFiles([image("uncertain.png")])
@@ -76,7 +76,7 @@ final class AutomaticImageDeadlineTests: XCTestCase {
             response(deadlines: [first]),
             response(deadlines: [second])
         ])
-        let store = store(engine, defaults: defaults)
+        let store = makeStore(engine, defaults: defaults)
         store.classifyFiles([image("first.png"), image("second.png")])
         await store.waitUntilIdle()
         XCTAssertEqual(store.garden.deadlines.count, 1)
@@ -97,7 +97,7 @@ final class AutomaticImageDeadlineTests: XCTestCase {
         return (defaults, suite)
     }
 
-    private func store(_ engine: AutomaticDeadlineEngine, defaults: UserDefaults) -> ShellStore {
+    private func makeStore(_ engine: AutomaticDeadlineEngine, defaults: UserDefaults) -> ShellStore {
         ShellStore(client: engine, defaults: defaults, arguments: [],
                    pollInterval: 1_000_000, jobTimeout: 1)
     }
