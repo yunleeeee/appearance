@@ -31,6 +31,16 @@ final class ClassificationArchiveTests: XCTestCase {
             source: file, categoryID: "learning", categoryLabel: "课程与学习")
         XCTAssertEqual(duplicate, .alreadyStored(firstPath))
 
+        // Re-importing identical bytes from the original location must still
+        // leave only the single verified archived image, even with a new mtime.
+        try original.write(to: file)
+        let sameBytes = try await archive.copyClassifiedFile(
+            source: file, categoryID: "learning", categoryLabel: "课程与学习")
+        XCTAssertEqual(sameBytes, .moved(firstPath))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: output.appendingPathComponent("课程与学习/report (2).txt").path))
+
         // Another physical file with the same name must not overwrite it.
         let other = root.appendingPathComponent("other", isDirectory: true)
         try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
@@ -72,6 +82,22 @@ final class ClassificationArchiveTests: XCTestCase {
         let disabled = try await archive.copyClassifiedFile(
             source: source, categoryID: "learning", categoryLabel: "学习")
         XCTAssertEqual(disabled, .notConfigured)
+    }
+
+    func testUnwritableOrMissingTargetDoesNotDeleteOriginal() async throws {
+        let (root, archive, defaults, suite) = try fixture()
+        defer { defaults.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: root) }
+        let original = root.appendingPathComponent("cannot-move.png")
+        let contents = Data([12, 34, 56])
+        try contents.write(to: original)
+        archive.selectDestination(root.appendingPathComponent("does-not-exist"))
+        do {
+            _ = try await archive.copyClassifiedFile(
+                source: original, categoryID: "learning", categoryLabel: "学习")
+            XCTFail("Invalid destination must not be silently created")
+        } catch {
+            XCTAssertEqual(try Data(contentsOf: original), contents)
+        }
     }
 
     func testAlreadyCategorizedFileIsNotRecopied() async throws {
