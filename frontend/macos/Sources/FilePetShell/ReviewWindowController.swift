@@ -213,8 +213,21 @@ private struct PendingReviewView: View {
                 labelledField("截止日期", placeholder: "YYYY-MM-DD", text: $dueDate, id: "review-date")
                 labelledField("截止时间（可选）", placeholder: "HH:mm，可留空", text: $dueTime, id: "review-time")
             }
-            if selectedCandidate?.yearInferred == true {
+            if let candidate = selectedCandidate, let reason = candidate.reliabilityReason {
+                HStack(spacing: 6) {
+                    Image(systemName: candidate.reliability == "low"
+                          ? "exclamationmark.circle" : "info.circle")
+                    Text(reason)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            } else if selectedCandidate?.yearInferred == true {
                 Text("年份由系统推定，请按原文核对。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if selectedCandidate?.titleInferred == true {
+                Text("任务名称根据页面类型概括，请核对具体作业名称。")
                     .font(.caption).foregroundStyle(.secondary)
             }
             if let evidence = selectedCandidate?.evidence, !evidence.isEmpty {
