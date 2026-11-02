@@ -16,7 +16,7 @@
 | `due_time` | 本地钟表时分秒，可为 `null`；**绝不补填 23:59** |
 | `year_inferred` | 年份由 Python 推断，需由用户核实 |
 | `evidence`, `signal`, `source_path` | 识别原文、触发规则和本地原始路径 |
-| `confirmation_required` | 图片 OCR、推断年份或原本已逾期时必须人工核对 |
+| `confirmation_required` | 仅不确定候选需要核实；明确、完整的未来日期图片 OCR 默认可自动接纳 |
 | `status` | `candidate` 或 `needs_confirmation` |
 
 Swift 为向后兼容把新增字段声明为可选。不要在 Swift 再跑 OCR 或正则提取；不向网络发送文件，不移动、修改或删除原始文件。
@@ -44,7 +44,7 @@ Python 单次 OCR 的 `content_fingerprint` 是**图片内容摘要而非路径�
 
 - Python 核心限定任务名推断的证据范围：附件名和泛化的学习平台页眉不能成为 DDL 标题；单张截图有多门课程时不擅自关联第一个课程来合并花朵。
 - macOS 只负责展示，`FileDisplayName` 将系统自动截图名和无语义的 `screen.png`、`image.jpg` 等隐藏为“截图”或“图片”。真实文件路径保留给“查看来源”，`AppDelegate` 的任务菜单也不会直接展示自动生成的时间戳路径。
-- `reliability` 的等级不代表 OCR 校准概率。无误差保证的图片 OCR 继续静默进入待确认，文本中完整且明确的 DDL 可按原规则创建花朵。
+- `reliability` 的等级不代表 OCR 校准概率。用户选择默认自动模式：有明确截止语义、完整有效且未逾期年月日的图片 OCR 可以自动创建花朵；年份推断、过去日期和无效 OCR 才进入静默待审。
 - 两种去重分别作用于分类葡萄的 OCR 内容指纹和候选 DDL 的 `semantic_key`；对不可靠的跨课程或不同 OCR 内容保守地不合并，防止两个真实任务被吞掉。
 
 ## P0：六阶段与保守日期语义
@@ -116,3 +116,11 @@ swift test --filter LiveGardenIntegrationTests
 指针命中扫描由 40Hz 降至 10Hz；静置停止图层重绘，有限事件期间约 24fps；静态 atlas 裁切与 alpha mask 只初始化一次。尚无真实长时间 CPU、能耗与多屏基准数据，不能将估计当实测。大量任务在内存中仍会参与队列排序（最多仅显示三窗）；可在后续使用更高效的索引或分页。
 
 Python 的协议未来可以直接复用给 Windows 外壳；Windows 应独立实现透明点击穿透、动画帧预算、通知唤醒和任务持久化，不能搬运 AppKit/SwiftUI 视图。稳定 ID 当前依赖路径和 OCR 证据，文件改名或 OCR 改变可能产生新 ID；未来可用本地内容指纹缓解。外壳中的日期按本机时区解释，原文件未声明时区需优先由用户确认。
+
+### 2026-11-02：图片自动 DDL（默认开启）
+
+用户反馈先前每张图片都被要求人工确认，交互成本过高。现在后端只有在日期推断、日期已过去、OCR 失败或缺少明确截止证据时才要求复核；完整有效、未过期、有截止语义的图片 OCR 默认 `confirmation_required: false`、`reliability: high`。这是规则置信等级，**不是 OCR 实际识别正确率**；自动化优先可能产生少量误提醒，用户可通过任务列表编辑并在完成后撤销采摘。
+
+状态栏和应用菜单增加“自动创建明确的图片 DDL”勾选项，默认打开。关闭后，**以后投喂**的图片即使是高等级候选也保存进待确认列表，不影响已保存的花朵、葡萄或完成记录；再次打开并重投喂，可以让原有同一候选自动转入花园，清除重复待确认候选。偏好保存在 `filepet.shell.deadlines.autoAcceptImageOCR.v1`，独立于后端协议和原有存档键。
+
+视觉花朵阶段仍由真实截止时间计算；日期未注明具体时分时依日历日表现，不虚构 23:59。复现：`cd backend && python -m pytest -q`、`cd frontend/macos && swift test`。
