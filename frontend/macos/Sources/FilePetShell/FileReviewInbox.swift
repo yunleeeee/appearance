@@ -26,6 +26,10 @@ final class FileReviewInbox: ObservableObject {
         catch { persistenceError = "读取待确认事项失败：\(error.localizedDescription)" }
     }
 
+    var pendingSemanticKeys: Set<String> {
+        Set(items.flatMap { $0.candidates.compactMap(\.semanticKey) })
+    }
+
     func enqueue(result: EngineClassificationResult, candidates: [EngineDeadline]? = nil, needsCategoryReview: Bool? = nil) {
         let path = URL(fileURLWithPath: result.path).standardizedFileURL.path
         let previous = items.first { $0.id == path }
