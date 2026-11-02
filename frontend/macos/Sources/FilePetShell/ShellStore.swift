@@ -29,6 +29,8 @@ final class ShellStore: ObservableObject {
     private let defaults: UserDefaults
     private var classifiedPaths: Set<String>
     private let pathsKey = "filepet.shell.inventory.paths.v1"
+    private let fingerprintsKey = "filepet.shell.inventory.ocrFingerprints.v1"
+    private var imageFingerprints: Set<String> = []
     private var client: (any EngineServing)?
     private let runtime: (any EngineRuntimeManaging)?
     private let usesInjectedClient: Bool
@@ -55,6 +57,7 @@ final class ShellStore: ObservableObject {
         reviewInbox = FileReviewInbox(defaults: defaults)
         self.defaults = defaults
         classifiedPaths = Set(defaults.stringArray(forKey: "filepet.shell.inventory.paths.v1") ?? [])
+        imageFingerprints = Set(defaults.stringArray(forKey: "filepet.shell.inventory.ocrFingerprints.v1") ?? [])
         categoryLabels = defaults.dictionary(forKey: "filepet.shell.inventory.labels.v1") as? [String: String] ?? [:]
         vine.setCategoryLabels(categoryLabels)
         self.pollInterval = pollInterval
@@ -203,7 +206,7 @@ final class ShellStore: ObservableObject {
             for (index, url) in files.enumerated() {
                 try Task.checkCancellation()
                 guard runID == batchID else { return }
-                status = "正在分类（\(index + 1)/\(files.count)）\(url.lastPathComponent)"
+                status = "正在分类（\(index + 1)/\(files.count)）\(FileDisplayName.label(url.lastPathComponent))"
                 let scope = url.startAccessingSecurityScopedResource()
                 defer { if scope { url.stopAccessingSecurityScopedResource() } }
                 do {
@@ -215,28 +218,43 @@ final class ShellStore: ObservableObject {
                         let identity = URL(fileURLWithPath: result.path).standardizedFileURL.path
                         var label: String?
                         var newGrape = false
+                        let fingerprint = result.contentFingerprint.flatMap { $0.isEmpty ? nil : $0 }
+                        let duplicateContent = fingerprint.map { imageFingerprints.contains($0) } ?? false
                         if result.status == "classified", let category = result.categoryID, !category.isEmpty {
                             let resolved = result.categoryLabel ?? categoryLabels[category] ?? category
                             label = resolved
                             categoryLabels[category] = resolved
                             vine.setCategoryLabels(categoryLabels)
                             defaults.set(categoryLabels, forKey: "filepet.shell.inventory.labels.v1")
-                            if classifiedPaths.insert(identity).inserted {
+                            let newPath = classifiedPaths.insert(identity).inserted
+                            if newPath && !duplicateContent {
                                 vine.recordSuccess(category: category)
-                                defaults.set(classifiedPaths.sorted(), forKey: pathsKey)
                                 newGrape = true
                             }
+                            if newPath { defaults.set(classifiedPaths.sorted(), forKey: pathsKey) }
                         }
                         let known = Set(garden.deadlines.map(\.id))
-                        let toReview = result.deadlines.filter {
-                            $0.requiresConfirmation && !known.contains($0.id)
+                        let knownSemanticKeys = Set(garden.deadlines.compactMap(\.semanticKey))
+                        let pendingKeys = reviewInbox.pendingSemanticKeys
+                        let toReview = result.deadlines.filter { candidate in
+                            guard candidate.requiresConfirmation && !known.contains(candidate.id) else { return false }
+                            if let key = candidate.semanticKey {
+                                return !knownSemanticKeys.contains(key) && !pendingKeys.contains(key)
+                            }
+                            return true
                         }
                         let added = garden.feed(result.deadlines.filter { !$0.requiresConfirmation })
+                        if let fingerprint, label != nil || !result.deadlines.isEmpty {
+                            if imageFingerprints.insert(fingerprint).inserted {
+                                defaults.set(imageFingerprints.sorted(), forKey: fingerprintsKey)
+                            }
+                        }
                         let categoryPending = label == nil
                         if categoryPending || !toReview.isEmpty {
                             reviewInbox.enqueue(result: result, candidates: toReview,
                                                 needsCategoryReview: categoryPending)
-                        } else {
+                        } else if reviewInbox.items.first(where: { $0.id == identity }) == nil {
+                            // A re-feed must not discard an existing unconfirmed OCR candidate.
                             reviewInbox.remove(id: identity)
                         }
                         let outcome: ShellFileResult.Outcome
@@ -244,16 +262,17 @@ final class ShellStore: ObservableObject {
                         else if result.deadlines.isEmpty { outcome = .classified }
                         else { outcome = .deadline }
                         let categorySummary = label == nil ? "分类待确认" :
-                            (newGrape ? "已新增分类葡萄" : "分类葡萄已计数")
+                            (newGrape ? "已新增分类葡萄" :
+                                (duplicateContent ? "相同截图已处理" : "分类葡萄已计数"))
                         let deadlineSummary = !toReview.isEmpty
                             ? "\(toReview.count) 条 DDL 待核对"
                             : (result.deadlines.isEmpty ? "无 DDL" : "新增 \(added) 朵花")
                         results.append(ShellFileResult(
-                            fileName: url.lastPathComponent, outcome: outcome,
+                            fileName: FileDisplayName.label(url.lastPathComponent), outcome: outcome,
                             categoryLabel: label, detail: "\(categorySummary)；\(deadlineSummary)",
                             reviewID: (categoryPending || !toReview.isEmpty) ? identity : nil))
                     } else {
-                        results.append(ShellFileResult(fileName: url.lastPathComponent, outcome: .failed,
+                        results.append(ShellFileResult(fileName: FileDisplayName.label(url.lastPathComponent), outcome: .failed,
                                                        categoryLabel: nil, detail: job.error?.detail ?? "分类引擎未返回有效结果"))
                     }
                 } catch is CancellationError { throw CancellationError() }
@@ -283,7 +302,7 @@ final class ShellStore: ObservableObject {
             }
             connectionStatus = "分类引擎：未连接"
             status = friendlyError(error)
-            results = files.map { ShellFileResult(fileName: $0.lastPathComponent, outcome: .failed,
+            results = files.map { ShellFileResult(fileName: FileDisplayName.label($0.lastPathComponent), outcome: .failed,
                                                   categoryLabel: nil, detail: status) }
         }
     }
