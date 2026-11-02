@@ -261,6 +261,7 @@ final class ShellStore: ObservableObject {
                         let identity = URL(fileURLWithPath: result.path).standardizedFileURL.path
                         var label: String?
                         var newGrape = false
+                        var duplicateTaskCrop = false
                         var archiveSummary = ""
                         var relocatedPath: String?
                         let fingerprint = result.contentFingerprint.flatMap { $0.isEmpty ? nil : $0 }
@@ -272,7 +273,7 @@ final class ShellStore: ObservableObject {
                             vine.setCategoryLabels(categoryLabels)
                             defaults.set(categoryLabels, forKey: "filepet.shell.inventory.labels.v1")
                             let semanticTokens = grapeTokens(category: category, deadlines: result.deadlines)
-                            let duplicateTaskCrop = fingerprint != nil &&
+                            duplicateTaskCrop = fingerprint != nil &&
                                 !semanticTokens.isEmpty &&
                                 semanticTokens.isSubset(of: semanticGrapes)
                             let newPath = classifiedPaths.insert(identity).inserted
@@ -369,7 +370,8 @@ final class ShellStore: ObservableObject {
                         let categorySummary = label == nil
                             ? (matchingPending == nil ? "分类待确认" : "相同截图已在待确认中") :
                             (newGrape ? "已新增分类葡萄" :
-                                (duplicateContent ? "相同截图已处理" : "分类葡萄未重复增加"))
+                                (duplicateContent ? "相同截图已处理" :
+                                 duplicateTaskCrop ? "相同任务已处理" : "分类葡萄已计数"))
                         let deadlineSummary = !toReview.isEmpty
                             ? "\(toReview.count) 条 DDL 待核对"
                             : (result.deadlines.isEmpty ? "无 DDL" : "新增 \(added) 朵花")
