@@ -87,6 +87,64 @@ final class ShellDeadlineRoutingTests: XCTestCase {
         XCTAssertTrue(restoredStore.garden.deadlines.isEmpty)
     }
 
+    func testRenamedSameScreenshotOnlyAddsOneGrapeAndOneFlowerAcrossRestart() async {
+        let (defaults, suite) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var first = result(deadlines: [deadline("capture-1")])
+        first.contentFingerprint = String(repeating: "a", count: 64)
+        first.deadlines[0].semanticKey = "same-assignment"
+        var second = result(deadlines: [deadline("capture-2")])
+        second.contentFingerprint = first.contentFingerprint
+        second.deadlines[0].semanticKey = "same-assignment"
+
+        let store = makeStore(GardenShellEngine(results: [first, second]), defaults: defaults)
+        let imgA = file("已粘贴 2026-11-01 下午8.14.18.png")
+        let imgB = file("已粘贴 2026-11-02 下午8.14.18.png")
+        store.classifyFiles([imgA, imgB])
+        await store.waitUntilIdle()
+        XCTAssertEqual(store.results.map(\.fileName), ["截图", "截图"])
+        XCTAssertEqual(store.vine.count(for: "learning"), 1)
+        XCTAssertEqual(store.garden.deadlines.count, 1)
+        XCTAssertTrue(store.results[1].detail.contains("相同截图已处理"))
+
+        let restored = makeStore(GardenShellEngine(results: [second]),
+                                 defaults: UserDefaults(suiteName: suite)!)
+        restored.classifyFiles([imgB])
+        await restored.waitUntilIdle()
+        XCTAssertEqual(restored.vine.count(for: "learning"), 1)
+        XCTAssertEqual(restored.garden.deadlines.count, 1)
+    }
+
+    func testDuplicateUnconfirmedOCROnTwoPathsStaysOneQuietReview() async {
+        let (defaults, suite) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var first = result(deadlines: [deadline("ocr-one")])
+        first.contentFingerprint = String(repeating: "b", count: 64)
+        first.deadlines[0].semanticKey = "same-ocr-review"
+        first.deadlines[0].confirmationRequired = true
+        var second = result(deadlines: [deadline("ocr-two")])
+        second.contentFingerprint = first.contentFingerprint
+        second.deadlines[0].semanticKey = "same-ocr-review"
+        second.deadlines[0].confirmationRequired = true
+        let store = makeStore(GardenShellEngine(results: [first, second]), defaults: defaults)
+        let pathA = file("已粘贴 2026-11-01 下午8.14.18.png")
+        let pathB = file("已粘贴 2026-11-02 下午8.14.18.png")
+        store.classifyFiles([pathA, pathB])
+        await store.waitUntilIdle()
+        XCTAssertEqual(store.garden.deadlines.count, 0)
+        XCTAssertEqual(store.reviewInbox.items.count, 1)
+        XCTAssertEqual(store.reviewInbox.items[0].candidates.count, 1)
+        XCTAssertEqual(store.vine.count(for: "learning"), 1)
+
+        // Re-feeding the same source must not silently erase the pending DDL.
+        let again = makeStore(GardenShellEngine(results: [first]),
+                              defaults: UserDefaults(suiteName: suite)!)
+        again.classifyFiles([pathA])
+        await again.waitUntilIdle()
+        XCTAssertEqual(again.reviewInbox.items.count, 1)
+        XCTAssertEqual(again.reviewInbox.items[0].candidates.count, 1)
+    }
+
     private func isolatedDefaults() -> (UserDefaults, String) {
         let suite = "FilePetShell.ShellDeadlineRoutingTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -132,11 +190,12 @@ private actor GardenShellEngine: EngineServing {
     func createJob(path: String) async throws -> EngineJobAccepted {
         guard !results.isEmpty else { throw URLError(.badServerResponse) }
         let template = results.removeFirst()
-        let result = EngineClassificationResult(path: path, fileName: URL(fileURLWithPath: path).lastPathComponent,
+        var result = EngineClassificationResult(path: path, fileName: URL(fileURLWithPath: path).lastPathComponent,
                                                status: template.status, categoryID: template.categoryID,
                                                categoryLabel: template.categoryLabel, confidence: template.confidence,
                                                matchedKeywords: template.matchedKeywords, reason: template.reason,
                                                extractionChars: template.extractionChars, deadlines: template.deadlines)
+        result.contentFingerprint = template.contentFingerprint
         let id = UUID().uuidString
         jobs[id] = EngineJob(jobID: id, status: terminalStatus, result: result, error: nil)
         return EngineJobAccepted(jobID: id, status: "queued")
