@@ -55,18 +55,16 @@ final class DeadlineGarden: ObservableObject {
                          completedAt: deadline.completedAt, now: now ?? currentTime)
     }
 
-    /// Prioritize imminent tasks; expired tasks remain in the queue and can
-    /// occupy at most one spare slot so they never hide all new urgent tasks.
+    /// A single unobtrusive flower is resident at a time. Upcoming tasks
+    /// have priority by due time; overdue tasks remain persisted in the queue
+    /// and become visible only when no upcoming task is available.
     var visibleDeadlines: [GardenDeadline] {
         let upcoming = activeDeadlines.filter { stage(for: $0) != .withered }
             .sorted(by: earlier)
+        if let closest = upcoming.first { return [closest] }
         let overdue = activeDeadlines.filter { stage(for: $0) == .withered }
             .sorted(by: earlier)
-        var visible = Array(upcoming.prefix(3))
-        if visible.count < 3, let lastOverdue = overdue.last {
-            visible.append(lastOverdue)
-        }
-        return visible
+        return overdue.last.map { [$0] } ?? []
     }
 
     private func earlier(_ lhs: GardenDeadline, _ rhs: GardenDeadline) -> Bool {
