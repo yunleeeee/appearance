@@ -351,7 +351,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             项目：\(deadline.project)
             截止：\(deadline.dueDate) \(deadline.dueTime ?? "（时间未注明）")
             状态：\(store.garden.stage(for: deadline)?.label ?? "待确认")
-            \(deadline.yearInferred ? "年份曾由系统推断，需要核实。\\n" : "")来源：\(deadline.sourcePath ?? "未知")
+            \(deadline.yearInferred ? "年份曾由系统推断，需要核实。\\n" : "")来源：\(deadline.sourcePath.map { FileDisplayName.label(URL(fileURLWithPath: $0).lastPathComponent) } ?? "未知")
             证据：\(deadline.evidence)
             """
         alert.addButton(withTitle: "关闭")
