@@ -19,26 +19,31 @@ final class DeadlinePanelLifecycleTests: XCTestCase {
             onFiles: { _ in })
         defer { controller.stop() }
         let initial = controller.panelIdentities
-        XCTAssertEqual(initial.count, 2)
-        XCTAssertNotNil(initial["first"])
-        XCTAssertNotNil(initial["second"])
+        XCTAssertEqual(initial.count, 1)
+        XCTAssertNotNil(initial["second"], "Earlier due task occupies the single window")
+
+        garden.refreshTime(now: now)
+        controller.refreshFromGarden()
+        XCTAssertEqual(controller.panelIdentities["second"], initial["second"],
+                       "Stage refresh must reuse the same panel")
 
         garden.feed([candidate("urgent", "2026-11-01")], now: now)
         controller.refreshFromGarden()
-        XCTAssertEqual(controller.panelIdentities["first"], initial["first"])
-        XCTAssertEqual(controller.panelIdentities["second"], initial["second"])
-        XCTAssertNotNil(controller.panelIdentities["urgent"])
+        let urgent = controller.panelIdentities["urgent"]
+        XCTAssertNotNil(urgent)
+        XCTAssertEqual(controller.panelIdentities.count, 1)
+        XCTAssertNil(controller.panelIdentities["second"])
 
         garden.refreshTime(now: now.addingTimeInterval(86_400))
         controller.refreshFromGarden()
-        XCTAssertEqual(controller.panelIdentities["first"], initial["first"])
-        XCTAssertEqual(controller.panelIdentities["second"], initial["second"])
-        XCTAssertTrue(controller.panelIdentities.count <= 3)
+        XCTAssertEqual(controller.panelIdentities["urgent"], urgent)
+        XCTAssertEqual(controller.panelIdentities.count, 1)
 
         garden.harvest(id: "urgent", now: now.addingTimeInterval(86_400))
         controller.refreshFromGarden()
         XCTAssertNil(controller.panelIdentities["urgent"])
-        XCTAssertEqual(controller.panelIdentities["first"], initial["first"])
+        XCTAssertNotNil(controller.panelIdentities["second"])
+        XCTAssertEqual(controller.panelIdentities.count, 1)
     }
 
     private func candidate(_ id: String, _ due: String) -> EngineDeadline {
