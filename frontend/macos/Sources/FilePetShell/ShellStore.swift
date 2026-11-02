@@ -401,6 +401,22 @@ final class ShellStore: ObservableObject {
         }
         reviewInbox.resolveCategory(reviewID: reviewID)
         status = "已确认为“\(label)”，葡萄记录已保存"
+        if archive.destination != nil {
+            // A later manual category confirmation should also archive the
+            // file. The user-selected folder is opt-in and the copy stays off
+            // the main thread; a missing original only reports a copy error.
+            let source = URL(fileURLWithPath: review.path)
+            Task { [weak self] in
+                guard let self else { return }
+                do {
+                    let receipt = try await self.archive.copyClassifiedFile(
+                        source: source, categoryID: categoryID, categoryLabel: label)
+                    if case .copied = receipt { self.status = "已复制分类文件至“\(label)”" }
+                } catch {
+                    self.status = "已确认分类；归档失败（原件未改动）：" + error.localizedDescription
+                }
+            }
+        }
         updateReviewedResult(review, outcome: .classified, detail: status, categoryLabel: label)
         return nil
     }
