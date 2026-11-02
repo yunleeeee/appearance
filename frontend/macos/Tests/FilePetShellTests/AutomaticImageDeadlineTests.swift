@@ -86,6 +86,52 @@ final class AutomaticImageDeadlineTests: XCTestCase {
         XCTAssertEqual(store.garden.undoLastHarvest(), "source-one")
     }
 
+    func testDifferentCropsOfOneTaskDoNotGrowExtraGrapesAcrossRestart() async {
+        let (defaults, suite) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var whole = response(deadlines: [deadline("whole", key: "network-chapter-four")])
+        whole.contentFingerprint = String(repeating: "a", count: 64)
+        var crop = response(deadlines: [deadline("crop", key: "network-chapter-four")])
+        crop.contentFingerprint = String(repeating: "b", count: 64)
+        let initial = makeStore(AutomaticDeadlineEngine(results: [whole, crop]), defaults: defaults)
+        initial.classifyFiles([image("full.png"), image("tight-crop.png")])
+        await initial.waitUntilIdle()
+        XCTAssertEqual(initial.vine.totalGrapes, 1,
+                       "Different OCR text can still describe the same verified assignment")
+        XCTAssertEqual(initial.garden.deadlines.count, 1)
+        XCTAssertEqual(initial.results.count, 2)
+
+        var newTask = response(deadlines: [
+            deadline("existing-another-crop", key: "network-chapter-four"),
+            deadline("distinct", key: "network-chapter-five")
+        ])
+        newTask.contentFingerprint = String(repeating: "c", count: 64)
+        let restarted = makeStore(AutomaticDeadlineEngine(results: [newTask]),
+                                  defaults: UserDefaults(suiteName: suite)!)
+        XCTAssertEqual(restarted.vine.totalGrapes, 1)
+        restarted.classifyFiles([image("two-homeworks.png")])
+        await restarted.waitUntilIdle()
+        XCTAssertEqual(restarted.vine.totalGrapes, 2,
+                       "A screenshot with a genuinely new task must still count")
+        XCTAssertEqual(restarted.garden.deadlines.count, 2)
+    }
+
+    func testSemanticGrapeIdentityIsCategoryScoped() async {
+        let (defaults, suite) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var learning = response(deadlines: [deadline("learning", key: "shared-id")])
+        learning.contentFingerprint = String(repeating: "d", count: 64)
+        var finance = response(deadlines: [deadline("finance", key: "shared-id")])
+        finance.categoryID = "finance"
+        finance.categoryLabel = "财务与票据"
+        finance.contentFingerprint = String(repeating: "e", count: 64)
+        let store = makeStore(AutomaticDeadlineEngine(results: [learning, finance]), defaults: defaults)
+        store.classifyFiles([image("course.png"), image("invoice.png")])
+        await store.waitUntilIdle()
+        XCTAssertEqual(store.vine.totalGrapes, 2,
+                       "An accidental cross-category matching key must not hide a file")
+    }
+
     private func image(_ name: String) -> URL {
         URL(fileURLWithPath: "/tmp/filepet-automatic-image-tests/" + name)
     }
