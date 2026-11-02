@@ -14,19 +14,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var reviewWindowController: ReviewWindowController?
     private var petVisible = true
     private var cancellables = Set<AnyCancellable>()
-    private weak var engineMenuItem: NSMenuItem?
-    private weak var summaryMenuItem: NSMenuItem?
-    private weak var classifyMenuItem: NSMenuItem?
-    private weak var flowerMenuItem: NSMenuItem?
-    private weak var queueMenuItem: NSMenuItem?
-    private weak var applicationEngineMenuItem: NSMenuItem?
-    private weak var applicationSummaryMenuItem: NSMenuItem?
-    private weak var reviewMenuItem: NSMenuItem?
-    private weak var applicationReviewMenuItem: NSMenuItem?
-    private weak var automaticOCRMenuItem: NSMenuItem?
-    private weak var applicationAutomaticOCRMenuItem: NSMenuItem?
-    private weak var archiveLocationMenuItem: NSMenuItem?
-    private weak var applicationArchiveLocationMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -157,193 +144,154 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func createApplicationMenu() {
         let main = NSMenu()
-        let item = NSMenuItem()
-        let commands = NSMenu(title: "葡萄藤")
-        commands.delegate = self
-        commands.autoenablesItems = false
-        let engine = NSMenuItem(title: store.connectionStatus, action: nil, keyEquivalent: "")
-        engine.isEnabled = false
-        commands.addItem(engine)
-        applicationEngineMenuItem = engine
-        let summary = NSMenuItem(title: store.status, action: nil, keyEquivalent: "")
-        summary.isEnabled = false
-        commands.addItem(summary)
-        applicationSummaryMenuItem = summary
-        commands.addItem(.separator())
-        let flowers = NSMenuItem(title: "DDL 花朵：悬停查看，点击收获", action: nil, keyEquivalent: "")
-        commands.addItem(flowers)
-        let choose = NSMenuItem(title: "选择文件分类…", action: #selector(chooseFiles), keyEquivalent: "o")
-        choose.target = self
-        commands.addItem(choose)
-        let archive = NSMenuItem(title: archiveMenuTitle, action: #selector(chooseArchiveFolder), keyEquivalent: "s")
-        archive.keyEquivalentModifierMask = [.command, .shift]
-        archive.target = self
-        commands.addItem(archive)
-        applicationArchiveLocationMenuItem = archive
-        let disableArchive = NSMenuItem(title: "停止自动移动归档", action: #selector(disableArchive), keyEquivalent: "")
-        disableArchive.target = self
-        commands.addItem(disableArchive)
-        let reviews = NSMenuItem(title: pendingReviewMenuTitle, action: #selector(showPendingReviews), keyEquivalent: "")
-        reviews.target = self
-        commands.addItem(reviews)
-        applicationReviewMenuItem = reviews
-        let autoImage = NSMenuItem(title: "自动创建明确的图片 DDL", action: #selector(toggleAutomaticOCR), keyEquivalent: "")
-        autoImage.target = self
-        autoImage.state = store.autoAcceptImageDeadlines ? .on : .off
-        commands.addItem(autoImage)
-        applicationAutomaticOCRMenuItem = autoImage
-        let results = NSMenuItem(title: "查看最近分类结果…", action: #selector(showResults), keyEquivalent: "")
-        results.target = self
-        commands.addItem(results)
-        commands.addItem(.separator())
-        let quit = NSMenuItem(title: "退出葡萄藤", action: #selector(quitApp), keyEquivalent: "q")
-        quit.target = self
-        commands.addItem(quit)
-        item.submenu = commands
-        main.addItem(item)
+        let app = NSMenuItem(title: "FilePet", action: nil, keyEquivalent: "")
+        app.submenu = makeCompactMenu()
+        main.addItem(app)
         NSApp.mainMenu = main
     }
 
     private func createMenuBar() {
-        let item = NSStatusBar.system.statusItem(
-            withLength: NSStatusItem.variableLength
-        )
-        let menuIcon = NSImage(
-            systemSymbolName: "archivebox.fill",
-            accessibilityDescription: "葡萄藤"
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        let icon = NSImage(
+            systemSymbolName: "archivebox.fill", accessibilityDescription: "FilePet"
         )?.withSymbolConfiguration(.init(pointSize: 18, weight: .regular, scale: .medium))
-        menuIcon?.isTemplate = true
-        item.button?.image = menuIcon
-
-        let menu = NSMenu()
-        menu.delegate = self
-        menu.autoenablesItems = false
-        let engine = NSMenuItem(title: store.connectionStatus, action: nil, keyEquivalent: "")
-        engine.isEnabled = false
-        menu.addItem(engine)
-        engineMenuItem = engine
-        let summary = NSMenuItem(title: store.status, action: nil, keyEquivalent: "")
-        summary.isEnabled = false
-        menu.addItem(summary)
-        summaryMenuItem = summary
-        let flowers = NSMenuItem(title: "DDL 花朵：悬停查看，点击收获", action: nil, keyEquivalent: "")
-        flowers.isEnabled = false
-        menu.addItem(flowers)
-        flowerMenuItem = flowers
-        let queue = NSMenuItem(title: "DDL 任务列表", action: nil, keyEquivalent: "")
-        queue.submenu = NSMenu(title: "DDL 任务列表")
-        menu.addItem(queue)
-        queueMenuItem = queue
-        menu.addItem(.separator())
-        let choose = NSMenuItem(title: "选择文件分类…", action: #selector(chooseFiles), keyEquivalent: "")
-        choose.target = self
-        menu.addItem(choose)
-        classifyMenuItem = choose
-        let archive = NSMenuItem(title: archiveMenuTitle, action: #selector(chooseArchiveFolder), keyEquivalent: "")
-        archive.target = self
-        menu.addItem(archive)
-        archiveLocationMenuItem = archive
-        let disableArchive = NSMenuItem(title: "停止自动移动归档", action: #selector(disableArchive), keyEquivalent: "")
-        disableArchive.target = self
-        menu.addItem(disableArchive)
-        let reviews = NSMenuItem(title: pendingReviewMenuTitle, action: #selector(showPendingReviews), keyEquivalent: "")
-        reviews.target = self
-        menu.addItem(reviews)
-        reviewMenuItem = reviews
-        let autoImage = NSMenuItem(title: "自动创建明确的图片 DDL", action: #selector(toggleAutomaticOCR), keyEquivalent: "")
-        autoImage.target = self
-        autoImage.state = store.autoAcceptImageDeadlines ? .on : .off
-        menu.addItem(autoImage)
-        automaticOCRMenuItem = autoImage
-        let reconnect = NSMenuItem(title: "重新连接分类引擎", action: #selector(reconnectEngine), keyEquivalent: "")
-        reconnect.target = self
-        menu.addItem(reconnect)
-        let detail = NSMenuItem(title: "查看最近分类结果…", action: #selector(showResults), keyEquivalent: "")
-        detail.target = self
-        menu.addItem(detail)
-        let undo = NSMenuItem(title: "撤销最近一次采摘", action: #selector(undoHarvest), keyEquivalent: "")
-        undo.target = self
-        menu.addItem(undo)
-        menu.addItem(.separator())
-
-        let toggle = NSMenuItem(
-            title: "显示/隐藏葡萄藤",
-            action: #selector(toggleVine),
-            keyEquivalent: ""
-        )
-        toggle.target = self
-        menu.addItem(toggle)
-
-        menu.addItem(.separator())
-
-        let quit = NSMenuItem(
-            title: "退出葡萄藤",
-            action: #selector(quitApp),
-            keyEquivalent: "q"
-        )
-        quit.target = self
-        menu.addItem(quit)
-
-        item.menu = menu
+        icon?.isTemplate = true
+        item.button?.image = icon
+        item.menu = makeCompactMenu()
         statusItem = item
     }
 
-    private var archiveMenuTitle: String {
-        guard let destination = store.archive.destination else {
-            return "选择分类文件保存位置…（未启用）"
-        }
-        return "分类文件保存至：" + destination.lastPathComponent + "…"
+    private func makeCompactMenu() -> NSMenu {
+        let menu = NSMenu(title: "FilePet")
+        menu.autoenablesItems = false
+        menu.delegate = self
+        populateCompactMenu(menu)
+        return menu
     }
 
-    private var pendingReviewMenuTitle: String {
-        let count = store.reviewInbox.items.reduce(0) { $0 + max(1, $1.candidates.count) }
-        return "待确认事项（\(count)）…"
+    private func item(_ title: String, action: Selector,
+                      key: String = "") -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        item.target = self
+        return item
+    }
+
+    private var pendingReviewCount: Int {
+        store.reviewInbox.items.reduce(0) { $0 + max(1, $1.candidates.count) }
+    }
+
+    private func populateCompactMenu(_ menu: NSMenu) {
+        menu.removeAllItems()
+
+        // A single short status line replaces three independent engine/DDL
+        // counters. The status tooltip retains detailed progress information.
+        let connected = store.connectionStatus.hasPrefix("分类引擎：已连接")
+        let status = NSMenuItem(title: connected ? "FilePet · 已连接" : "FilePet · 未连接",
+                                action: nil, keyEquivalent: "")
+        status.isEnabled = false
+        menu.addItem(status)
+        menu.addItem(.separator())
+
+        let open = item("导入文件…", action: #selector(chooseFiles), key: "o")
+        open.isEnabled = !store.isBusy
+        menu.addItem(open)
+
+        let tasks = NSMenuItem(
+            title: "DDL 任务（\(store.garden.activeDeadlines.count)）",
+            action: nil, keyEquivalent: ""
+        )
+        let taskMenu = NSMenu(title: "DDL 任务")
+        populateDeadlineMenu(taskMenu)
+        tasks.submenu = taskMenu
+        menu.addItem(tasks)
+
+        if pendingReviewCount > 0 {
+            menu.addItem(item("待确认（\(pendingReviewCount)）…",
+                              action: #selector(showPendingReviews)))
+        }
+
+        let folderName = store.archive.destination?.lastPathComponent
+        let archiveLabel = folderName.map { "归档位置：\($0)…" } ?? "选择归档位置…"
+        let archive = item(archiveLabel, action: #selector(chooseArchiveFolder), key: "s")
+        archive.keyEquivalentModifierMask = [.command, .shift]
+        menu.addItem(archive)
+
+        let countItem = NSMenuItem(title: "显示花朵：\(store.garden.visibleLimit) 朵",
+                                   action: nil, keyEquivalent: "")
+        let countMenu = NSMenu(title: "显示花朵")
+        for count in 1...3 {
+            let choice = item("\(count) 朵", action: #selector(changeFlowerCount(_:)))
+            choice.representedObject = count
+            choice.state = store.garden.visibleLimit == count ? .on : .off
+            countMenu.addItem(choice)
+        }
+        countItem.submenu = countMenu
+        menu.addItem(countItem)
+
+        menu.addItem(.separator())
+        let more = NSMenuItem(title: "更多操作", action: nil, keyEquivalent: "")
+        let moreMenu = NSMenu(title: "更多操作")
+
+        let autoOCR = item("自动识别图片 DDL", action: #selector(toggleAutomaticOCR))
+        autoOCR.state = store.autoAcceptImageDeadlines ? .on : .off
+        moreMenu.addItem(autoOCR)
+
+        let showVine = item("显示葡萄藤", action: #selector(toggleVine))
+        showVine.state = store.petVisible ? .on : .off
+        moreMenu.addItem(showVine)
+        moreMenu.addItem(item("查看最近结果…", action: #selector(showResults)))
+        if pendingReviewCount == 0 {
+            moreMenu.addItem(item("待确认事项…", action: #selector(showPendingReviews)))
+        }
+        let undo = item("撤销上次采摘", action: #selector(undoHarvest))
+        undo.isEnabled = store.garden.deadlines.contains { $0.completedAt != nil }
+        moreMenu.addItem(undo)
+        moreMenu.addItem(.separator())
+        moreMenu.addItem(item("重新连接引擎", action: #selector(reconnectEngine)))
+        if store.archive.destination != nil {
+            moreMenu.addItem(item("停止自动移动归档", action: #selector(disableArchive)))
+        }
+        more.submenu = moreMenu
+        menu.addItem(more)
+
+        menu.addItem(.separator())
+        menu.addItem(item("退出 FilePet", action: #selector(quitApp), key: "q"))
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
-        reviewMenuItem?.title = pendingReviewMenuTitle
-        applicationReviewMenuItem?.title = pendingReviewMenuTitle
-        archiveLocationMenuItem?.title = archiveMenuTitle
-        applicationArchiveLocationMenuItem?.title = archiveMenuTitle
-        let autoState: NSControl.StateValue = store.autoAcceptImageDeadlines ? .on : .off
-        automaticOCRMenuItem?.state = autoState
-        applicationAutomaticOCRMenuItem?.state = autoState
-        applicationEngineMenuItem?.title = store.connectionStatus
-        applicationSummaryMenuItem?.title = store.status
-        engineMenuItem?.title = store.connectionStatus
-        summaryMenuItem?.title = store.status
-        classifyMenuItem?.isEnabled = !store.isBusy
-        flowerMenuItem?.title = "DDL 花朵：\(store.garden.visibleDeadlines.count) 朵，\(store.garden.queuedCount) 项排队 · 点击收获"
-        rebuildDeadlineMenu()
+        populateCompactMenu(menu)
     }
 
-    private func rebuildDeadlineMenu() {
-        guard let submenu = queueMenuItem?.submenu else { return }
-        submenu.removeAllItems()
+    private func populateDeadlineMenu(_ submenu: NSMenu) {
         let tasks = store.garden.activeDeadlines.sorted {
             if $0.dueDate != $1.dueDate { return $0.dueDate < $1.dueDate }
             if $0.dueTime != $1.dueTime { return ($0.dueTime ?? "zz") < ($1.dueTime ?? "zz") }
             return $0.id < $1.id
         }
         if tasks.isEmpty {
-            let item = NSMenuItem(title: "目前没有未完成的 DDL", action: nil, keyEquivalent: "")
-            item.isEnabled = false
-            submenu.addItem(item)
+            let empty = NSMenuItem(title: "暂无未完成任务", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            submenu.addItem(empty)
         }
+        let visible = Set(store.garden.visibleDeadlines.map(\.id))
         for deadline in tasks.prefix(40) {
-            let stage = store.garden.stage(for: deadline)?.label ?? "待核对"
-            let time = deadline.dueDate + (deadline.dueTime.map { " " + $0 } ?? "（时间未注明）")
-            let item = NSMenuItem(title: "\(stage) · \(deadline.title) · \(time)",
-                                  action: #selector(showDeadlineFromMenu(_:)), keyEquivalent: "")
-            item.target = self
+            let mark = visible.contains(deadline.id) ? "✿ " : ""
+            let item = self.item(mark + deadline.title + " · " + deadline.dueDate,
+                                 action: #selector(showDeadlineFromMenu(_:)))
             item.representedObject = deadline.id
             submenu.addItem(item)
         }
         if tasks.count > 40 {
-            let remaining = NSMenuItem(title: "另外 \(tasks.count - 40) 项", action: nil, keyEquivalent: "")
-            remaining.isEnabled = false
-            submenu.addItem(remaining)
+            let extra = NSMenuItem(title: "另有 \(tasks.count - 40) 项未展示",
+                                   action: nil, keyEquivalent: "")
+            extra.isEnabled = false
+            submenu.addItem(extra)
         }
+    }
+
+    @objc private func changeFlowerCount(_ sender: NSMenuItem) {
+        guard let count = sender.representedObject as? Int else { return }
+        store.garden.setVisibleLimit(count)
     }
 
     @objc private func showDeadlineFromMenu(_ sender: NSMenuItem) {
@@ -433,9 +381,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func toggleAutomaticOCR() {
         store.setAutoAcceptImageDeadlines(!store.autoAcceptImageDeadlines)
-        let state: NSControl.StateValue = store.autoAcceptImageDeadlines ? .on : .off
-        automaticOCRMenuItem?.state = state
-        applicationAutomaticOCRMenuItem?.state = state
     }
 
     @objc private func undoHarvest() {
