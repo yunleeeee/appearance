@@ -97,6 +97,15 @@ final class ClassificationArchive {
         return hasher.finalize()
     }
 
+    /// The source may be edited by another app while we copy it. Hash it
+    /// once more immediately before deleting its original path, so a late
+    /// change cannot be silently discarded after the destination was verified.
+    private nonisolated static func removeSourceIfUnchanged(_ source: URL,
+                                                             expected: SHA256.Digest) throws {
+        guard try digest(source) == expected else { throw CocoaError(.fileReadCorruptFile) }
+        try FileManager.default.removeItem(at: source)
+    }
+
     private nonisolated static func moveVerified(
         source: URL, root: URL, category: String, previous: Record?,
         preferredName: String?
@@ -134,7 +143,7 @@ final class ClassificationArchive {
            try digest(URL(fileURLWithPath: previous.output)) == sourceDigest {
             // An earlier copy-only build may have left an identical original.
             // Remove it only after verifying the already-saved copy.
-            try fm.removeItem(at: source)
+            try removeSourceIfUnchanged(source, expected: sourceDigest)
             return .saved(previous.output, Record(output: previous.output,
                                                    size: size, modified: modified))
         }
@@ -160,7 +169,7 @@ final class ClassificationArchive {
                 // only the redundant incoming source. Different contents
                 // still receive a collision suffix rather than overwriting.
                 if let existing = try? digest(target), existing == sourceDigest {
-                    try fm.removeItem(at: source)
+                    try removeSourceIfUnchanged(source, expected: sourceDigest)
                     return .saved(target.path, Record(output: target.path,
                                                       size: size, modified: modified))
                 }
@@ -180,7 +189,7 @@ final class ClassificationArchive {
                 throw CocoaError(.fileReadCorruptFile)
             }
             do {
-                try fm.removeItem(at: source)
+                try removeSourceIfUnchanged(source, expected: sourceDigest)
             } catch {
                 // Never destroy the verified destination if the source
                 // unexpectedly disappeared during a deletion error.
