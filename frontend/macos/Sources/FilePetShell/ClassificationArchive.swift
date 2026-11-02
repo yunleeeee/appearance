@@ -120,7 +120,7 @@ final class ClassificationArchive {
         let size = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
         let modified = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
         let sourceDigest = try digest(source)
-        if let previous, previous.size == size, previous.modified == modified,
+        if let previous, previous.size == size,
            fm.fileExists(atPath: previous.output),
            try digest(URL(fileURLWithPath: previous.output)) == sourceDigest {
             // An earlier copy-only build may have left an identical original.
