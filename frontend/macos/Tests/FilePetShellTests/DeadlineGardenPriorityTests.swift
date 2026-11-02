@@ -13,16 +13,16 @@ final class DeadlineGardenPriorityTests: XCTestCase {
         garden.feed([candidate("late", "2026-11-28"),
                      candidate("next", "2026-11-10"),
                      candidate("later", "2026-11-15")], now: now)
-        XCTAssertEqual(garden.visibleDeadlines.map(\.id), ["next", "later", "late"])
+        XCTAssertEqual(garden.visibleDeadlines.map(\.id), ["next"])
         garden.feed([candidate("tomorrow", "2026-11-01")], now: now)
-        XCTAssertEqual(garden.visibleDeadlines.map(\.id), ["tomorrow", "next", "later"])
-        XCTAssertEqual(garden.queuedCount, 1)
+        XCTAssertEqual(garden.visibleDeadlines.map(\.id), ["tomorrow"])
+        XCTAssertEqual(garden.queuedCount, 3)
         garden.harvest(id: "tomorrow", now: now)
-        XCTAssertEqual(garden.visibleDeadlines.map(\.id), ["next", "later", "late"])
+        XCTAssertEqual(garden.visibleDeadlines.map(\.id), ["next"])
         let restored = DeadlineGarden(defaults: defaults, now: now)
-        XCTAssertEqual(restored.visibleDeadlines.map(\.id), ["next", "later", "late"])
+        XCTAssertEqual(restored.visibleDeadlines.map(\.id), ["next"])
         XCTAssertEqual(restored.undoLastHarvest(), "tomorrow")
-        XCTAssertEqual(restored.visibleDeadlines.map(\.id), ["tomorrow", "next", "later"])
+        XCTAssertEqual(restored.visibleDeadlines.map(\.id), ["tomorrow"])
     }
 
     func testExpiredTasksRemainQueuedButNeverMonopolizeThreeSlots() {
@@ -37,7 +37,8 @@ final class DeadlineGardenPriorityTests: XCTestCase {
         garden.feed([candidate("urgent", "2026-11-01"),
                      candidate("soon", "2026-11-02"),
                      candidate("week", "2026-11-06")], now: now)
-        XCTAssertEqual(garden.visibleDeadlines.map(\.id), ["urgent", "soon", "week"])
+        XCTAssertEqual(garden.visibleDeadlines.map(\.id), ["urgent"])
+        XCTAssertEqual(garden.queuedCount, 7)
         XCTAssertEqual(garden.deadlines.count, 8)
     }
 
