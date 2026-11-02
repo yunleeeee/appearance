@@ -40,14 +40,16 @@ final class ClassificationArchive {
                      forKey: destinationKey)
     }
 
-    func copyClassifiedFile(source: URL, categoryID: String, categoryLabel: String) async throws -> Receipt {
+    func copyClassifiedFile(source: URL, categoryID: String, categoryLabel: String,
+                            preferredName: String? = nil) async throws -> Receipt {
         guard let root = destination else { return .notConfigured }
         let normalized = source.standardizedFileURL.resolvingSymlinksInPath()
         let folder = Self.categoryFolder(categoryID: categoryID, label: categoryLabel)
         let key = root.path + "\u{0}" + normalized.path + "\u{0}" + folder
         let old = records[key]
         let result = try await Task.detached(priority: .utility) {
-            try Self.moveVerified(source: normalized, root: root, category: folder, previous: old)
+            try Self.moveVerified(source: normalized, root: root, category: folder,
+                                  previous: old, preferredName: preferredName)
         }.value
         switch result {
         case .saved(let path, let record):
@@ -90,7 +92,8 @@ final class ClassificationArchive {
     }
 
     private nonisolated static func moveVerified(
-        source: URL, root: URL, category: String, previous: Record?
+        source: URL, root: URL, category: String, previous: Record?,
+        preferredName: String?
     ) throws -> MoveResult {
         let fm = FileManager.default
         var rootIsDirectory: ObjCBool = false
@@ -130,7 +133,15 @@ final class ClassificationArchive {
                                                    size: size, modified: modified))
         }
 
-        let stem = source.deletingPathExtension().lastPathComponent
+        // Meaningful OCR titles can rename generated screenshots, but only
+        // when the caller explicitly supplied a verified task title.
+        let baseStem = source.deletingPathExtension().lastPathComponent
+        let safe = preferredName?.unicodeScalars.map { char -> String in
+            CharacterSet.controlCharacters.contains(char) ||
+                "/\\:".unicodeScalars.contains(char) ? "_" : String(char)
+        }.joined().trimmingCharacters(in: .whitespacesAndNewlines)
+        let chosen = String((safe ?? "").prefix(80))
+        let stem = chosen.isEmpty || chosen == "." || chosen == ".." ? baseStem : chosen
         let ext = source.pathExtension
         for index in 1...10000 {
             let filename = index == 1 ? source.lastPathComponent :
