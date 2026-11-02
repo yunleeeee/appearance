@@ -121,9 +121,11 @@ final class AutomaticImageDeadlineTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         var learning = response(deadlines: [deadline("learning", key: "shared-id")])
         learning.contentFingerprint = String(repeating: "d", count: 64)
-        var finance = response(deadlines: [deadline("finance", key: "shared-id")])
-        finance.categoryID = "finance"
-        finance.categoryLabel = "财务与票据"
+        var finance = EngineClassificationResult(
+            path: "/tmp/invoice.png", fileName: "invoice.png",
+            status: "classified", categoryID: "finance", categoryLabel: "财务与票据",
+            confidence: 0.9, matchedKeywords: ["发票"], reason: "明确的分类",
+            extractionChars: 80, deadlines: [deadline("finance", key: "shared-id")])
         finance.contentFingerprint = String(repeating: "e", count: 64)
         let store = makeStore(AutomaticDeadlineEngine(results: [learning, finance]), defaults: defaults)
         store.classifyFiles([image("course.png"), image("invoice.png")])
