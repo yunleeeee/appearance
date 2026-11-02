@@ -150,8 +150,9 @@ final class ClassificationArchive {
         let stem = chosen.isEmpty || chosen == "." || chosen == ".." ? baseStem : chosen
         let ext = source.pathExtension
         for index in 1...10000 {
-            let filename = index == 1 ? source.lastPathComponent :
-                stem + " (" + String(index) + ")" + (ext.isEmpty ? "" : "." + ext)
+            let suffix = ext.isEmpty ? "" : "." + ext
+            let filename = index == 1 ? stem + suffix :
+                stem + " (" + String(index) + ")" + suffix
             let target = directory.appendingPathComponent(filename)
             if fm.fileExists(atPath: target.path) {
                 // Same destination name with identical bytes is not a
