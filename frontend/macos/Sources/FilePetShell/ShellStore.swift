@@ -250,7 +250,12 @@ final class ShellStore: ObservableObject {
                             }
                         }
                         let categoryPending = label == nil
-                        if categoryPending || !toReview.isEmpty {
+                        let matchingPending = fingerprint.flatMap { digest in
+                            reviewInbox.items.first {
+                                $0.id != identity && $0.contentFingerprint == digest
+                            }
+                        }
+                        if (categoryPending || !toReview.isEmpty) && matchingPending == nil {
                             reviewInbox.enqueue(result: result, candidates: toReview,
                                                 needsCategoryReview: categoryPending)
                         } else if reviewInbox.items.first(where: { $0.id == identity }) == nil {
@@ -261,7 +266,8 @@ final class ShellStore: ObservableObject {
                         if categoryPending || !toReview.isEmpty { outcome = .needsReview }
                         else if result.deadlines.isEmpty { outcome = .classified }
                         else { outcome = .deadline }
-                        let categorySummary = label == nil ? "分类待确认" :
+                        let categorySummary = label == nil
+                            ? (matchingPending == nil ? "分类待确认" : "相同截图已在待确认中") :
                             (newGrape ? "已新增分类葡萄" :
                                 (duplicateContent ? "相同截图已处理" : "分类葡萄已计数"))
                         let deadlineSummary = !toReview.isEmpty
@@ -270,7 +276,8 @@ final class ShellStore: ObservableObject {
                         results.append(ShellFileResult(
                             fileName: FileDisplayName.label(url.lastPathComponent), outcome: outcome,
                             categoryLabel: label, detail: "\(categorySummary)；\(deadlineSummary)",
-                            reviewID: (categoryPending || !toReview.isEmpty) ? identity : nil))
+                            reviewID: (categoryPending || !toReview.isEmpty)
+                                ? (matchingPending?.id ?? identity) : nil))
                     } else {
                         results.append(ShellFileResult(fileName: FileDisplayName.label(url.lastPathComponent), outcome: .failed,
                                                        categoryLabel: nil, detail: job.error?.detail ?? "分类引擎未返回有效结果"))
@@ -336,13 +343,19 @@ final class ShellStore: ObservableObject {
         guard let review = reviewInbox.items.first(where: { $0.id == reviewID }) else { return "这项待确认记录已处理。" }
         guard let label = categoryLabels[categoryID], !label.isEmpty else { return "请选择核心提供的分类。" }
         if classifiedPaths.insert(review.path).inserted {
-            vine.beginReceiving()
-            vine.recordSuccess(category: categoryID)
-            vine.scheduleSleep()
+            let duplicateContent = review.contentFingerprint.map { imageFingerprints.contains($0) } ?? false
+            if !duplicateContent {
+                vine.beginReceiving()
+                vine.recordSuccess(category: categoryID)
+                vine.scheduleSleep()
+            }
             defaults.set(classifiedPaths.sorted(), forKey: pathsKey)
+            if let digest = review.contentFingerprint, imageFingerprints.insert(digest).inserted {
+                defaults.set(imageFingerprints.sorted(), forKey: fingerprintsKey)
+            }
         }
         reviewInbox.resolveCategory(reviewID: reviewID)
-        status = "已确认为“\(label)”，葡萄计数已更新"
+        status = "已确认为“\(label)”，葡萄记录已保存"
         updateReviewedResult(review, outcome: .classified, detail: status, categoryLabel: label)
         return nil
     }
