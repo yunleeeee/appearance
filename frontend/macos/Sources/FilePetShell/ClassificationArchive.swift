@@ -43,7 +43,13 @@ final class ClassificationArchive {
     func copyClassifiedFile(source: URL, categoryID: String, categoryLabel: String,
                             preferredName: String? = nil) async throws -> Receipt {
         guard let root = destination else { return .notConfigured }
-        let normalized = source.standardizedFileURL.resolvingSymlinksInPath()
+        // Do not follow a dragged alias/symlink and accidentally remove its
+        // target when performing a verified move.
+        let provided = source.standardizedFileURL
+        if (try? provided.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true {
+            throw CocoaError(.fileReadUnsupportedScheme)
+        }
+        let normalized = provided.resolvingSymlinksInPath()
         let folder = Self.categoryFolder(categoryID: categoryID, label: categoryLabel)
         let key = root.path + "\u{0}" + normalized.path + "\u{0}" + folder
         let old = records[key]
