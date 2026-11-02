@@ -15,8 +15,8 @@ final class ShellDeadlineRoutingTests: XCTestCase {
         await store.waitUntilIdle()
 
         XCTAssertEqual(store.results.map(\.outcome), [.deadline])
-        XCTAssertEqual(store.garden.visibleDeadlines.map(\.id), ["ddl-1", "ddl-2", "ddl-3"])
-        XCTAssertEqual(store.garden.queuedCount, 2)
+        XCTAssertEqual(store.garden.visibleDeadlines.map(\.id), ["ddl-1"])
+        XCTAssertEqual(store.garden.queuedCount, 4)
         XCTAssertEqual(store.vine.totalGrapes, 1)
         XCTAssertEqual(store.vine.count(for: "learning"), 1)
         XCTAssertTrue(store.status.contains("1 份 DDL"))
@@ -46,7 +46,7 @@ final class ShellDeadlineRoutingTests: XCTestCase {
         await firstStore.waitUntilIdle()
         let completedAt = Date(timeIntervalSince1970: 2_000)
         firstStore.garden.harvest(id: "ddl-1", now: completedAt)
-        XCTAssertEqual(firstStore.garden.visibleDeadlines.map(\.id), ["ddl-2", "ddl-3", "ddl-4"])
+        XCTAssertEqual(firstStore.garden.visibleDeadlines.map(\.id), ["ddl-2"])
 
         let restoredStore = makeStore(GardenShellEngine(results: [response]),
                                      defaults: UserDefaults(suiteName: suite)!)
@@ -55,8 +55,8 @@ final class ShellDeadlineRoutingTests: XCTestCase {
 
         XCTAssertEqual(restoredStore.garden.deadlines.count, 4)
         XCTAssertEqual(restoredStore.garden.deadlines[0].completedAt, completedAt)
-        XCTAssertEqual(restoredStore.garden.visibleDeadlines.map(\.id), ["ddl-2", "ddl-3", "ddl-4"])
-        XCTAssertEqual(restoredStore.garden.queuedCount, 0)
+        XCTAssertEqual(restoredStore.garden.visibleDeadlines.map(\.id), ["ddl-2"])
+        XCTAssertEqual(restoredStore.garden.queuedCount, 2)
         XCTAssertEqual(restoredStore.results.map(\.outcome), [.deadline])
         XCTAssertEqual(restoredStore.vine.totalGrapes, 1)
     }
@@ -171,7 +171,7 @@ final class ShellDeadlineRoutingTests: XCTestCase {
         XCTAssertEqual(reopened.vine.count(for: "learning"), 1)
     }
 
-    func testClassifiedFileIsCopiedToChosenFolderWithoutLosingGrapesOrDeadlines() async throws {
+    func testClassifiedFileMovesToChosenFolderAndUpdatesDeadlineSource() async throws {
         let (defaults, suite) = isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -181,23 +181,26 @@ final class ShellDeadlineRoutingTests: XCTestCase {
         let original = root.appendingPathComponent("作业.txt")
         try Data("original content".utf8).write(to: original)
 
-        let response = result(deadlines: [deadline("archived-ddl")])
+        var sourceDeadline = deadline("archived-ddl")
+        sourceDeadline.sourcePath = original.path
+        let response = result(deadlines: [sourceDeadline])
         let shell = makeStore(GardenShellEngine(results: [response, response]), defaults: defaults)
         shell.archive.selectDestination(destination)
         shell.classifyFiles([original])
         await shell.waitUntilIdle()
         let copied = destination.appendingPathComponent("课程与学习/作业.txt")
         XCTAssertEqual(try Data(contentsOf: copied), Data("original content".utf8))
-        XCTAssertEqual(try Data(contentsOf: original), Data("original content".utf8))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: original.path))
         XCTAssertEqual(shell.vine.totalGrapes, 1)
         XCTAssertEqual(shell.garden.deadlines.count, 1)
-        XCTAssertTrue(shell.results[0].detail.contains("已复制至课程与学习"))
+        XCTAssertEqual(shell.garden.deadlines[0].sourcePath, copied.path)
+        XCTAssertTrue(shell.results[0].detail.contains("已移动至课程与学习"))
 
         shell.classifyFiles([original])
         await shell.waitUntilIdle()
         XCTAssertEqual(shell.vine.totalGrapes, 1)
         XCTAssertEqual(shell.garden.deadlines.count, 1)
-        XCTAssertTrue(shell.results[0].detail.contains("归档文件已存在"))
+        XCTAssertTrue(shell.results[0].detail.contains("文件已归档"))
         XCTAssertFalse(FileManager.default.fileExists(
             atPath: destination.appendingPathComponent("课程与学习/作业 (2).txt").path))
     }
