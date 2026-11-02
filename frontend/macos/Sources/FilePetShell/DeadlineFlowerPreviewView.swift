@@ -48,7 +48,7 @@ struct DeadlineFlowerDetailsView: View {
             }
             if let path = deadline.sourcePath {
                 HStack {
-                    Text("来源：" + URL(fileURLWithPath: path).lastPathComponent)
+                    Text("来源：" + FileDisplayName.label(URL(fileURLWithPath: path).lastPathComponent))
                         .font(.caption).lineLimit(1)
                     if onOpenSource != nil {
                         Button("查看来源") { onOpenSource?() }
