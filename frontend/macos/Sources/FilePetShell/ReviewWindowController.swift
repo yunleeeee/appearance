@@ -84,7 +84,7 @@ private struct PendingReviewView: View {
                 List(selection: $selectedReviewID) {
                     ForEach(inbox.items) { review in
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(review.fileName).lineLimit(2)
+                            Text(FileDisplayName.label(review.fileName)).lineLimit(2)
                             Text(review.candidates.isEmpty
                                  ? "补充 DDL 或指定分类"
                                  : "\(review.candidates.count) 项 DDL 待核对")
@@ -125,7 +125,7 @@ private struct PendingReviewView: View {
                 VStack(alignment: .leading, spacing: 15) {
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 5) {
-                            Text(review.fileName).font(.title3).fontWeight(.semibold)
+                            Text(FileDisplayName.label(review.fileName)).font(.title3).fontWeight(.semibold)
                             Text(review.reason).font(.caption).foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -299,9 +299,9 @@ private struct PendingReviewView: View {
             dueDate = candidate.dueDate
             dueTime = candidate.dueTime ?? ""
         } else if let review = selectedReview {
-            let name = URL(fileURLWithPath: review.fileName).deletingPathExtension().lastPathComponent
-            title = name
-            project = name
+            let name = FileDisplayName.label(review.fileName)
+            title = name == "截图" || name == "图片" ? "" : URL(fileURLWithPath: name).deletingPathExtension().lastPathComponent
+            project = ""
             dueDate = ""
             dueTime = ""
         }
