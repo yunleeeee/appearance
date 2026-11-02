@@ -171,6 +171,37 @@ final class ShellDeadlineRoutingTests: XCTestCase {
         XCTAssertEqual(reopened.vine.count(for: "learning"), 1)
     }
 
+    func testClassifiedFileIsCopiedToChosenFolderWithoutLosingGrapesOrDeadlines() async throws {
+        let (defaults, suite) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let destination = root.appendingPathComponent("分类存储")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        let original = root.appendingPathComponent("作业.txt")
+        try Data("original content".utf8).write(to: original)
+
+        let response = result(deadlines: [deadline("archived-ddl")])
+        let shell = makeStore(GardenShellEngine(results: [response, response]), defaults: defaults)
+        shell.archive.selectDestination(destination)
+        shell.classifyFiles([original])
+        await shell.waitUntilIdle()
+        let copied = destination.appendingPathComponent("课程与学习/作业.txt")
+        XCTAssertEqual(try Data(contentsOf: copied), Data("original content".utf8))
+        XCTAssertEqual(try Data(contentsOf: original), Data("original content".utf8))
+        XCTAssertEqual(shell.vine.totalGrapes, 1)
+        XCTAssertEqual(shell.garden.deadlines.count, 1)
+        XCTAssertTrue(shell.results[0].detail.contains("已复制至课程与学习"))
+
+        shell.classifyFiles([original])
+        await shell.waitUntilIdle()
+        XCTAssertEqual(shell.vine.totalGrapes, 1)
+        XCTAssertEqual(shell.garden.deadlines.count, 1)
+        XCTAssertTrue(shell.results[0].detail.contains("归档文件已存在"))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: destination.appendingPathComponent("课程与学习/作业 (2).txt").path))
+    }
+
     private func isolatedDefaults() -> (UserDefaults, String) {
         let suite = "FilePetShell.ShellDeadlineRoutingTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
