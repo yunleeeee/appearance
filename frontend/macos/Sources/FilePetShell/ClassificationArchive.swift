@@ -147,7 +147,18 @@ final class ClassificationArchive {
             let filename = index == 1 ? source.lastPathComponent :
                 stem + " (" + String(index) + ")" + (ext.isEmpty ? "" : "." + ext)
             let target = directory.appendingPathComponent(filename)
-            if fm.fileExists(atPath: target.path) { continue }
+            if fm.fileExists(atPath: target.path) {
+                // Same destination name with identical bytes is not a
+                // collision: keep the existing verified copy and remove
+                // only the redundant incoming source. Different contents
+                // still receive a collision suffix rather than overwriting.
+                if let existing = try? digest(target), existing == sourceDigest {
+                    try fm.removeItem(at: source)
+                    return .saved(target.path, Record(output: target.path,
+                                                      size: size, modified: modified))
+                }
+                continue
+            }
             let staging = directory.appendingPathComponent(".filepet-stage-" + UUID().uuidString)
             defer { if fm.fileExists(atPath: staging.path) { try? fm.removeItem(at: staging) } }
             try fm.copyItem(at: source, to: staging)
