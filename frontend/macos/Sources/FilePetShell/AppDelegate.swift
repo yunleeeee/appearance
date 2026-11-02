@@ -24,6 +24,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private weak var applicationSummaryMenuItem: NSMenuItem?
     private weak var reviewMenuItem: NSMenuItem?
     private weak var applicationReviewMenuItem: NSMenuItem?
+    private weak var automaticOCRMenuItem: NSMenuItem?
+    private weak var applicationAutomaticOCRMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -193,6 +195,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         reviews.target = self
         commands.addItem(reviews)
         applicationReviewMenuItem = reviews
+        let autoImage = NSMenuItem(title: "自动创建明确的图片 DDL", action: #selector(toggleAutomaticOCR), keyEquivalent: "")
+        autoImage.target = self
+        autoImage.state = store.autoAcceptImageDeadlines ? .on : .off
+        commands.addItem(autoImage)
+        applicationAutomaticOCRMenuItem = autoImage
         let results = NSMenuItem(title: "查看最近分类结果…", action: #selector(showResults), keyEquivalent: "")
         results.target = self
         commands.addItem(results)
@@ -247,6 +254,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         reviews.target = self
         menu.addItem(reviews)
         reviewMenuItem = reviews
+        let autoImage = NSMenuItem(title: "自动创建明确的图片 DDL", action: #selector(toggleAutomaticOCR), keyEquivalent: "")
+        autoImage.target = self
+        autoImage.state = store.autoAcceptImageDeadlines ? .on : .off
+        menu.addItem(autoImage)
+        automaticOCRMenuItem = autoImage
         let reconnect = NSMenuItem(title: "重新连接分类引擎", action: #selector(reconnectEngine), keyEquivalent: "")
         reconnect.target = self
         menu.addItem(reconnect)
@@ -304,6 +316,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         reviewMenuItem?.title = pendingReviewMenuTitle
         applicationReviewMenuItem?.title = pendingReviewMenuTitle
+        let autoState: NSControl.StateValue = store.autoAcceptImageDeadlines ? .on : .off
+        automaticOCRMenuItem?.state = autoState
+        applicationAutomaticOCRMenuItem?.state = autoState
         applicationEngineMenuItem?.title = store.connectionStatus
         applicationSummaryMenuItem?.title = store.status
         engineMenuItem?.title = store.connectionStatus
@@ -403,6 +418,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func showPendingReviews() {
         if reviewWindowController == nil { reviewWindowController = ReviewWindowController(store: store) }
         reviewWindowController?.show()
+    }
+
+    @objc private func toggleAutomaticOCR() {
+        store.setAutoAcceptImageDeadlines(!store.autoAcceptImageDeadlines)
+        let state: NSControl.StateValue = store.autoAcceptImageDeadlines ? .on : .off
+        automaticOCRMenuItem?.state = state
+        applicationAutomaticOCRMenuItem?.state = state
     }
 
     @objc private func undoHarvest() {
