@@ -84,6 +84,42 @@ final class EngineClientTests: XCTestCase {
         }
     }
 
+    func testNewOCRSemanticFieldsDecodeWithoutBreakingOldPayloads() throws {
+        let payload = """
+        {
+          "path":"/tmp/已粘贴 2026-11-01 下午8.14.18.png",
+          "file_name":"已粘贴 2026-11-01 下午8.14.18.png",
+          "status":"classified","category_id":"learning",
+          "category_label":"课程与学习","confidence":0.65,
+          "matched_keywords":["作业"],"reason":"内容匹配",
+          "extraction_chars":85,
+          "content_fingerprint":"0123contenthash",
+          "deadlines":[{
+            "id":"old-path-id","title":"11月8日截止的作业",
+            "project":"课程与学习","due_date":"2026-11-08",
+            "due_time":"23:59","year_inferred":false,
+            "evidence":"截止日期：2026年11月8日23:59",
+            "confirmation_required":true,
+            "source_path":"/tmp/已粘贴 2026-11-01 下午8.14.18.png",
+            "semantic_key":"task-stable-across-screenshots",
+            "title_inferred":true,"reliability":"review",
+            "reliability_reason":"图片 OCR 需核对文字和截止时间"
+          }]
+        }
+        """
+        let result = try JSONDecoder().decode(EngineClassificationResult.self,
+                                              from: Data(payload.utf8))
+        XCTAssertEqual(result.contentFingerprint, "0123contenthash")
+        let deadline = try XCTUnwrap(result.deadlines.first)
+        XCTAssertTrue(deadline.requiresConfirmation)
+        XCTAssertEqual(deadline.semanticKey, "task-stable-across-screenshots")
+        XCTAssertEqual(deadline.titleInferred, true)
+        XCTAssertEqual(deadline.reliability, "review")
+        XCTAssertEqual(deadline.reliabilityReason, "图片 OCR 需核对文字和截止时间")
+        XCTAssertEqual(FileDisplayName.label(result.fileName), "截图")
+        XCTAssertTrue(result.path.contains("已粘贴"))
+    }
+
     func testFailedJobDecodesRootAuthorizationFailure() async throws {
         try await withClient({ _ in
             (200, #"{"job_id":"denied","status":"failed","result":null,"error":{"status_code":403,"detail":"文件不在授权的 root 文件夹内"}}"#)
