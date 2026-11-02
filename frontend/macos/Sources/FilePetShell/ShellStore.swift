@@ -25,6 +25,7 @@ final class ShellStore: ObservableObject {
     let vine: VineModel
     let garden: DeadlineGarden
     let reviewInbox: FileReviewInbox
+    let archive: ClassificationArchive
     var onShowPendingReviews: (() -> Void)?
     private let defaults: UserDefaults
     private var classifiedPaths: Set<String>
@@ -73,6 +74,7 @@ final class ShellStore: ObservableObject {
         vine = VineModel(defaults: defaults)
         garden = DeadlineGarden(defaults: defaults)
         reviewInbox = FileReviewInbox(defaults: defaults)
+        archive = ClassificationArchive(defaults: defaults)
         self.defaults = defaults
         classifiedPaths = Set(defaults.stringArray(forKey: "filepet.shell.inventory.paths.v1") ?? [])
         imageFingerprints = Set(defaults.stringArray(forKey: "filepet.shell.inventory.ocrFingerprints.v1") ?? [])
@@ -236,6 +238,7 @@ final class ShellStore: ObservableObject {
                         let identity = URL(fileURLWithPath: result.path).standardizedFileURL.path
                         var label: String?
                         var newGrape = false
+                        var archiveSummary = ""
                         let fingerprint = result.contentFingerprint.flatMap { $0.isEmpty ? nil : $0 }
                         let duplicateContent = fingerprint.map { imageFingerprints.contains($0) } ?? false
                         if result.status == "classified", let category = result.categoryID, !category.isEmpty {
@@ -250,6 +253,21 @@ final class ShellStore: ObservableObject {
                                 newGrape = true
                             }
                             if newPath { defaults.set(classifiedPaths.sorted(), forKey: pathsKey) }
+                            do {
+                                switch try await archive.copyClassifiedFile(
+                                    source: url, categoryID: category, categoryLabel: resolved) {
+                                case .notConfigured:
+                                    break // User has not opted in to a destination.
+                                case .copied(let path):
+                                    archiveSummary = "；已复制至" + URL(fileURLWithPath: path).deletingLastPathComponent().lastPathComponent
+                                case .alreadyCopied:
+                                    archiveSummary = "；归档文件已存在"
+                                }
+                            } catch {
+                                // Preserve the successful classification. Copy errors
+                                // must never remove or modify the original file.
+                                archiveSummary = "；归档失败：" + error.localizedDescription
+                            }
                         }
                         let accepted = result.deadlines.filter {
                             !needsDeadlineReview($0, result: result)
@@ -302,7 +320,7 @@ final class ShellStore: ObservableObject {
                             : (result.deadlines.isEmpty ? "无 DDL" : "新增 \(added) 朵花")
                         results.append(ShellFileResult(
                             fileName: FileDisplayName.label(url.lastPathComponent), outcome: outcome,
-                            categoryLabel: label, detail: "\(categorySummary)；\(deadlineSummary)",
+                            categoryLabel: label, detail: "\(categorySummary)；\(deadlineSummary)\(archiveSummary)",
                             reviewID: (categoryPending || !toReview.isEmpty)
                                 ? (matchingPending?.id ?? identity) : nil))
                     } else {
