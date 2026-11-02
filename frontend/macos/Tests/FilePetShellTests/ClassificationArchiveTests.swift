@@ -84,6 +84,27 @@ final class ClassificationArchiveTests: XCTestCase {
         XCTAssertEqual(disabled, .notConfigured)
     }
 
+    func testGeneratedScreenshotUsesMeaningfulAssignmentNameAndRemovesOriginal() async throws {
+        let (root, archive, defaults, suite) = try fixture()
+        defer { defaults.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: root) }
+        let original = root.appendingPathComponent("已粘贴 2026-11-02 下午7.12.01.png")
+        let image = Data([137, 80, 78, 71, 0, 1, 2, 3])
+        try image.write(to: original)
+        let destination = root.appendingPathComponent("archive")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        archive.selectDestination(destination)
+        let result = try await archive.copyClassifiedFile(
+            source: original, categoryID: "learning", categoryLabel: "课程与学习",
+            preferredName: "计算机网络 · 第四章作业")
+        let newPath = destination.appendingPathComponent(
+            "课程与学习/计算机网络 · 第四章作业.png")
+        XCTAssertEqual(result, .moved(newPath.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: original.path))
+        XCTAssertEqual(try Data(contentsOf: newPath), image)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(
+            atPath: newPath.deletingLastPathComponent().path).count, 1)
+    }
+
     func testUnwritableOrMissingTargetDoesNotDeleteOriginal() async throws {
         let (root, archive, defaults, suite) = try fixture()
         defer { defaults.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: root) }
