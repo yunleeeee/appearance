@@ -96,6 +96,19 @@ final class DeadlineGarden: ObservableObject {
         return added.count
     }
 
+    /// Update source locations after a verified local archive move. Task IDs,
+    /// completion records and semantic keys do not change.
+    func relinkSource(from oldPath: String, to newPath: String) {
+        guard oldPath != newPath else { return }
+        var updated = deadlines
+        var changed = false
+        for index in updated.indices where updated[index].sourcePath == oldPath {
+            updated[index].sourcePath = newPath
+            changed = true
+        }
+        if changed { save(updated) }
+    }
+
     func harvest(id: String, now: Date = Date()) {
         guard visibleDeadlines.contains(where: { $0.id == id }),
               let index = deadlines.firstIndex(where: { $0.id == id }),
