@@ -12,7 +12,6 @@ struct VineView: View {
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 24, paused: !animating)) { timeline in
             CompactGardenContentView(branches: model.branches, growth: model.latestGrowth,
-                activeTheftCategory: model.activeTheft?.category,
                 time: animating ? timeline.date.timeIntervalSinceReferenceDate : 0,
                 reduceMotion: reduceMotion)
         }
@@ -31,7 +30,6 @@ struct VineView: View {
 struct CompactGardenContentView: View {
     let branches: [VineBranch]
     let growth: VineGrowth?
-    let activeTheftCategory: String?
     let time: TimeInterval
     let reduceMotion: Bool
 
@@ -52,7 +50,6 @@ struct CompactGardenContentView: View {
                     .scaleEffect(scale)
                     .rotationEffect(.degrees(reduceMotion ? 0 : sin(time * 1.25 + Double(index) * 0.8) * 0.7), anchor: .top)
                     .position(x: anchor.x, y: anchor.y)
-                    .opacity(activeTheftCategory == branch.id ? 0 : 1)
             }
         }
         .frame(width: VineView.size.width, height: VineView.size.height)
@@ -145,7 +142,7 @@ enum CompactGrapeLayout {
     }
 }
 
-/// Shared by the native hanging fruit and Jerry's falling/carrying scene.
+/// Native hanging fruit in the classification garden.
 struct GrapeClusterView: View {
     let branch: VineBranch
     let growth: VineGrowth?
