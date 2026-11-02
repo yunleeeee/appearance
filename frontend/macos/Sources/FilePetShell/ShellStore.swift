@@ -30,6 +30,24 @@ final class ShellStore: ObservableObject {
     private var classifiedPaths: Set<String>
     private let pathsKey = "filepet.shell.inventory.paths.v1"
     private let fingerprintsKey = "filepet.shell.inventory.ocrFingerprints.v1"
+    private let automaticImageDeadlineKey = "filepet.shell.deadlines.autoAcceptImageOCR.v1"
+
+    /// Automation is opt-out. Strict mode only changes future feeds; it never
+    /// deletes an already accepted flower or alters a user's completion record.
+    var autoAcceptImageDeadlines: Bool {
+        defaults.object(forKey: automaticImageDeadlineKey) as? Bool ?? true
+    }
+
+    func setAutoAcceptImageDeadlines(_ enabled: Bool) {
+        defaults.set(enabled, forKey: automaticImageDeadlineKey)
+    }
+
+    private func needsDeadlineReview(_ candidate: EngineDeadline, result: EngineClassificationResult) -> Bool {
+        if candidate.requiresConfirmation { return true }
+        let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "webp", "bmp", "tif", "tiff"]
+        let isImage = imageExtensions.contains(URL(fileURLWithPath: result.path).pathExtension.lowercased())
+        return isImage && !autoAcceptImageDeadlines
+    }
     private var imageFingerprints: Set<String> = []
     private var client: (any EngineServing)?
     private let runtime: (any EngineRuntimeManaging)?
@@ -233,17 +251,26 @@ final class ShellStore: ObservableObject {
                             }
                             if newPath { defaults.set(classifiedPaths.sorted(), forKey: pathsKey) }
                         }
+                        let accepted = result.deadlines.filter {
+                            !needsDeadlineReview($0, result: result)
+                        }
+                        let added = garden.feed(accepted)
+                        // Users upgrading from mandatory-OCR-review mode should not
+                        // have the same task in both the flower garden and inbox.
+                        if garden.persistenceError == nil {
+                            reviewInbox.removeAutomaticallyAccepted(accepted)
+                        }
                         let known = Set(garden.deadlines.map(\.id))
                         let knownSemanticKeys = Set(garden.deadlines.compactMap(\.semanticKey))
                         let pendingKeys = reviewInbox.pendingSemanticKeys
                         let toReview = result.deadlines.filter { candidate in
-                            guard candidate.requiresConfirmation && !known.contains(candidate.id) else { return false }
+                            guard needsDeadlineReview(candidate, result: result),
+                                  !known.contains(candidate.id) else { return false }
                             if let key = candidate.semanticKey {
                                 return !knownSemanticKeys.contains(key) && !pendingKeys.contains(key)
                             }
                             return true
                         }
-                        let added = garden.feed(result.deadlines.filter { !$0.requiresConfirmation })
                         if let fingerprint, label != nil {
                             if imageFingerprints.insert(fingerprint).inserted {
                                 defaults.set(imageFingerprints.sorted(), forKey: fingerprintsKey)
