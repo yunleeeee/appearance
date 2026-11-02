@@ -30,6 +30,16 @@ Swift 为向后兼容把新增字段声明为可选。不要在 Swift 再跑 OCR
 - 单朵花的屏幕相对根部位置保持不变；两朵根部间距 57pt，三朵 56pt，同一桌面底线，原来高大的第二株缩到约为第一株的 1.41 倍。变动成员时小幅移动已有面板，不重新创建它们；Reduce Motion 禁用位置过渡。
 - 可复现的本地视觉证明增加 `two-flower-garden.png` 与 `three-flower-garden.png`，由运行时原生渲染器生成，而非重新绘制素材。真实多显示器与鼠标穿透仍须实机检查。
 
+## v0.5：截图语义和可信度（核心 PR #5）
+
+Python 单次 OCR 的 `content_fingerprint` 是**图片内容摘要而非路径摘要**。Swift 使用新本地键 `filepet.shell.inventory.ocrFingerprints.v1` 去重分类葡萄，并保留原有路径键 `filepet.shell.inventory.paths.v1`。两个截图文件名不同但 OCR 文本一致时，新增分类最多一颗葡萄；手动确认分类也遵守已保存的图片指纹。
+
+`deadlines[].semantic_key` 为跨图片候选的稳定语义键（可能为 `null`）；`DeadlineGarden` 将其作为与原有 `id` 并列的去重条件，保留已完成花朵的记录和状态。旧版用户存档无此字段时仍能正常反序列化，新加入的数据才携带它。OCR 待确认队列也依据该键合并相同事项；如果重复投喂已有待审截图，不会删除原待审候选。
+
+`title_inferred`、`reliability`、`reliability_reason` 允许 UI 解释任务名是从页面类型概括的，以及日期为什么需要确认。macOS 不再次进行 OCR 或重写 Python 的截止日期识别规则。对系统生成的 `已粘贴…png`、`Screenshot…png` 等，`FileDisplayName` 只替换界面**显示文本**为“截图”；原 `file_name`、`path`、`source_path` 和文件内容均原样保留以支持打开来源。
+
+风险：OCR 文本有差异又缺少明确课程/任务编号时可能无法跨截图识别重复；这种情况不使用仅凭日期的冒险合并。指纹是单向摘要，仍仅本地保存在 UserDefaults；不会将原始图片或正文上传。
+
 ## P0：六阶段与保守日期语义
 
 `DeadlineStageResolver` 完全不依赖 SwiftUI，不使用运行时间驱动花期。对于有具体时间的 DDL，剩余时间（含阈值边界）依次为：
