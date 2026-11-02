@@ -65,6 +65,35 @@ final class DeadlineGardenTests: XCTestCase {
         XCTAssertNil(restored.persistenceError)
     }
 
+    func testSemanticKeyDeduplicatesRenamedScreenshotsAndSurvivesCompletion() {
+        let (defaults, suite) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let garden = DeadlineGarden(defaults: defaults)
+        var original = deadline("old-path")
+        original.semanticKey = "task-same-ocr-content"
+        var renamed = deadline("new-path")
+        renamed.semanticKey = "task-same-ocr-content"
+        XCTAssertEqual(garden.feed([original, renamed]), 1)
+        XCTAssertEqual(garden.deadlines.count, 1)
+        garden.harvest(id: original.id)
+        let restored = DeadlineGarden(defaults: UserDefaults(suiteName: suite)!)
+        XCTAssertEqual(restored.feed([renamed]), 0)
+        XCTAssertEqual(restored.deadlines.count, 1)
+        XCTAssertNotNil(restored.deadlines[0].completedAt)
+    }
+
+    func testDifferentAssignmentsWithSameDateAndDistinctSemanticKeysRemainSeparate() {
+        let (defaults, suite) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let garden = DeadlineGarden(defaults: defaults)
+        var a = deadline("different-assignment-1")
+        var b = deadline("different-assignment-2")
+        a.semanticKey = "task-first"
+        b.semanticKey = "task-second"
+        XCTAssertEqual(garden.feed([a, b]), 2)
+        XCTAssertEqual(garden.deadlines.count, 2)
+    }
+
     private func isolatedDefaults() -> (UserDefaults, String) {
         let suite = "FilePetShell.DeadlineGardenTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
