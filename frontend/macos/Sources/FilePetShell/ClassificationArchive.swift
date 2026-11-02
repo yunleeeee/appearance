@@ -1,13 +1,15 @@
+import CryptoKit
 import Foundation
 
-/// Opt-in, local-only copy of classified files to a user-chosen directory.
-/// Originals are never renamed, moved, modified or removed. No network access.
+/// Opt-in local move into the user-selected category folder.
+/// Never deletes the original before byte-for-byte verification of the copy.
+/// A failed copy or verification leaves the original untouched.
 @MainActor
 final class ClassificationArchive {
     enum Receipt: Equatable {
         case notConfigured
-        case copied(String)
-        case alreadyCopied(String)
+        case moved(String)
+        case alreadyStored(String)
     }
 
     private struct Record: Codable, Sendable {
@@ -18,6 +20,7 @@ final class ClassificationArchive {
 
     private let defaults: UserDefaults
     private let destinationKey = "filepet.shell.archive.destination.v1"
+    // Keep existing receipt schema/key compatible with earlier copy-only builds.
     private let recordsKey = "filepet.shell.archive.records.v1"
     private var records: [String: Record]
 
@@ -32,7 +35,6 @@ final class ClassificationArchive {
         return URL(fileURLWithPath: raw, isDirectory: true)
     }
 
-    /// Call only after the user explicitly chooses a folder in NSOpenPanel.
     func selectDestination(_ url: URL?) {
         defaults.set(url?.standardizedFileURL.resolvingSymlinksInPath().path,
                      forKey: destinationKey)
@@ -45,25 +47,24 @@ final class ClassificationArchive {
         let key = root.path + "\u{0}" + normalized.path + "\u{0}" + folder
         let old = records[key]
         let result = try await Task.detached(priority: .utility) {
-            try Self.copy(source: normalized, root: root, category: folder, previous: old)
+            try Self.moveVerified(source: normalized, root: root, category: folder, previous: old)
         }.value
         switch result {
         case .saved(let path, let record):
             records[key] = record
             defaults.set(try JSONEncoder().encode(records), forKey: recordsKey)
-            return .copied(path)
+            return .moved(path)
         case .unchanged(let path):
-            return .alreadyCopied(path)
+            return .alreadyStored(path)
         }
     }
 
-    private enum CopyResult: Sendable {
+    private enum MoveResult: Sendable {
         case saved(String, Record)
         case unchanged(String)
     }
 
     private nonisolated static func categoryFolder(categoryID: String, label: String) -> String {
-        // Category label comes from the engine, never trust it as a path.
         let requested = label.trimmingCharacters(in: .whitespacesAndNewlines)
         let fallback = categoryID.trimmingCharacters(in: .whitespacesAndNewlines)
         let text = requested.isEmpty ? fallback : requested
@@ -76,33 +77,59 @@ final class ClassificationArchive {
         return limited.isEmpty || limited == "." || limited == ".." ? "未分类" : limited
     }
 
-    private nonisolated static func copy(source: URL, root: URL, category: String,
-                                         previous: Record?) throws -> CopyResult {
+    /// Stream hashes so moving large documents does not duplicate them in RAM.
+    private nonisolated static func digest(_ url: URL) throws -> SHA256.Digest {
+        let stream = try FileHandle(forReadingFrom: url)
+        defer { try? stream.close() }
+        var hasher = SHA256()
+        while true {
+            guard let block = try stream.read(upToCount: 1024 * 1024), !block.isEmpty else { break }
+            hasher.update(data: block)
+        }
+        return hasher.finalize()
+    }
+
+    private nonisolated static func moveVerified(
+        source: URL, root: URL, category: String, previous: Record?
+    ) throws -> MoveResult {
         let fm = FileManager.default
         var rootIsDirectory: ObjCBool = false
         guard fm.fileExists(atPath: root.path, isDirectory: &rootIsDirectory),
-              rootIsDirectory.boolValue else {
+              rootIsDirectory.boolValue else { throw CocoaError(.fileNoSuchFile) }
+        let directory = root.appendingPathComponent(category, isDirectory: true)
+        // Prevent following a pre-created category symlink to an unchosen folder.
+        if (try? directory.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true {
+            throw CocoaError(.fileWriteNoPermission)
+        }
+        try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        if !fm.fileExists(atPath: source.path) {
+            if let previous, fm.fileExists(atPath: previous.output) {
+                return .unchanged(previous.output)
+            }
             throw CocoaError(.fileNoSuchFile)
         }
         let attrs = try fm.attributesOfItem(atPath: source.path)
         guard (attrs[.type] as? FileAttributeType) == .typeRegular else {
             throw CocoaError(.fileReadUnsupportedScheme)
         }
-        let size = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
-        let modified = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
-        if let previous, previous.size == size, previous.modified == modified,
-           fm.fileExists(atPath: previous.output) {
-            return .unchanged(previous.output)
-        }
-        let directory = root.appendingPathComponent(category, isDirectory: true)
-        if (try? directory.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true {
-            throw CocoaError(.fileWriteNoPermission)
-        }
-        try fm.createDirectory(at: directory, withIntermediateDirectories: true)
         if source.deletingLastPathComponent().standardizedFileURL.path == directory.standardizedFileURL.path {
-            // An already-sorted file must not be copied onto itself.
             return .unchanged(source.path)
         }
+
+        let size = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
+        let modified = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        let sourceDigest = try digest(source)
+        if let previous, previous.size == size, previous.modified == modified,
+           fm.fileExists(atPath: previous.output),
+           try digest(URL(fileURLWithPath: previous.output)) == sourceDigest {
+            // An earlier copy-only build may have left an identical original.
+            // Remove it only after verifying the already-saved copy.
+            try fm.removeItem(at: source)
+            return .saved(previous.output, Record(output: previous.output,
+                                                   size: size, modified: modified))
+        }
+
         let stem = source.deletingPathExtension().lastPathComponent
         let ext = source.pathExtension
         for index in 1...10000 {
@@ -110,11 +137,31 @@ final class ClassificationArchive {
                 stem + " (" + String(index) + ")" + (ext.isEmpty ? "" : "." + ext)
             let target = directory.appendingPathComponent(filename)
             if fm.fileExists(atPath: target.path) { continue }
-            // copyItem fails rather than replacing an existing target; the
-            // source is never touched, including when a copy fails.
-            try fm.copyItem(at: source, to: target)
+            let staging = directory.appendingPathComponent(".filepet-stage-" + UUID().uuidString)
+            defer { if fm.fileExists(atPath: staging.path) { try? fm.removeItem(at: staging) } }
+            try fm.copyItem(at: source, to: staging)
+            guard try digest(staging) == sourceDigest else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            // The staged copy and destination share the same filesystem.
+            // Renaming into place avoids exposing a partial destination.
+            try fm.moveItem(at: staging, to: target)
+            guard try digest(target) == sourceDigest else {
+                try? fm.removeItem(at: target)
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            do {
+                try fm.removeItem(at: source)
+            } catch {
+                // Never destroy the verified destination if the source
+                // unexpectedly disappeared during a deletion error.
+                if fm.fileExists(atPath: source.path) {
+                    try? fm.removeItem(at: target)
+                    throw error
+                }
+            }
             return .saved(target.path, Record(output: target.path,
-                                             size: size, modified: modified))
+                                              size: size, modified: modified))
         }
         throw CocoaError(.fileWriteOutOfSpace)
     }
