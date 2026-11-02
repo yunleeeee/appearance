@@ -20,7 +20,11 @@ struct GardenDeadline: Identifiable, Codable, Equatable {
 final class DeadlineGarden: ObservableObject {
     @Published private(set) var deadlines: [GardenDeadline] = []
     @Published private(set) var persistenceError: String?
+    /// Maximum resident flower count. Older installations default to the
+    /// quiet, user-approved single-flower composition.
+    @Published private(set) var visibleLimit: Int
     private let defaults: UserDefaults
+    private let visibleLimitKey = "filepet.shell.garden.visibleLimit.v1"
     private let key = "filepet.shell.garden.deadlines.v1"
     private var resolver: DeadlineStageResolver
     private(set) var currentTime: Date
@@ -28,6 +32,7 @@ final class DeadlineGarden: ObservableObject {
     init(defaults: UserDefaults = .standard, now: Date = Date(),
          resolver: DeadlineStageResolver = DeadlineStageResolver()) {
         self.defaults = defaults
+        self.visibleLimit = Self.clampLimit(defaults.object(forKey: visibleLimitKey) as? Int ?? 1)
         self.currentTime = now
         self.resolver = resolver
         guard let data = defaults.data(forKey: key) else { return }
@@ -44,6 +49,17 @@ final class DeadlineGarden: ObservableObject {
 
     var activeDeadlines: [GardenDeadline] { deadlines.filter { $0.completedAt == nil } }
 
+    private static func clampLimit(_ count: Int) -> Int { min(3, max(1, count)) }
+
+    /// Adjust visibility only; all queued records, completion flags and
+    /// persisted identifiers remain untouched.
+    func setVisibleLimit(_ count: Int) {
+        let next = Self.clampLimit(count)
+        guard visibleLimit != next else { return }
+        defaults.set(next, forKey: visibleLimitKey)
+        visibleLimit = next
+    }
+
     func nextStageBoundary(after now: Date) -> Date? {
         activeDeadlines.compactMap {
             resolver.nextChange(dueDate: $0.dueDate, dueTime: $0.dueTime, now: now)
@@ -55,16 +71,19 @@ final class DeadlineGarden: ObservableObject {
                          completedAt: deadline.completedAt, now: now ?? currentTime)
     }
 
-    /// A single unobtrusive flower is resident at a time. Upcoming tasks
-    /// have priority by due time; overdue tasks remain persisted in the queue
-    /// and become visible only when no upcoming task is available.
+    /// A configurable 1–3 resident flowers, ordered by upcoming due time.
+    /// Expired tasks never vanish from storage or the queue, but at most
+    /// one overdue flower uses a spare visible slot.
     var visibleDeadlines: [GardenDeadline] {
         let upcoming = activeDeadlines.filter { stage(for: $0) != .withered }
             .sorted(by: earlier)
-        if let closest = upcoming.first { return [closest] }
-        let overdue = activeDeadlines.filter { stage(for: $0) == .withered }
-            .sorted(by: earlier)
-        return overdue.last.map { [$0] } ?? []
+        var visible = Array(upcoming.prefix(visibleLimit))
+        if visible.count < visibleLimit,
+           let latestOverdue = activeDeadlines.filter({ stage(for: $0) == .withered })
+               .sorted(by: earlier).last {
+            visible.append(latestOverdue)
+        }
+        return visible
     }
 
     private func earlier(_ lhs: GardenDeadline, _ rhs: GardenDeadline) -> Bool {
