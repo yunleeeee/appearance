@@ -32,6 +32,7 @@ final class ShellStore: ObservableObject {
     private var classifiedPaths: Set<String>
     private let pathsKey = "filepet.shell.inventory.paths.v1"
     private let fingerprintsKey = "filepet.shell.inventory.ocrFingerprints.v1"
+    private let semanticGrapesKey = "filepet.shell.inventory.semanticGrapes.v1"
     private let automaticImageDeadlineKey = "filepet.shell.deadlines.autoAcceptImageOCR.v1"
 
     /// Automation is opt-out. Strict mode only changes future feeds; it never
@@ -51,6 +52,26 @@ final class ShellStore: ObservableObject {
         return isImage && !autoAcceptImageDeadlines
     }
     private var imageFingerprints: Set<String> = []
+    /// Category-scoped task identity prevents an equivalent *crop* of the
+    /// same screenshot from growing another grape. Content fingerprint alone
+    /// only catches byte-different images with exactly matching OCR text.
+    private var semanticGrapes: Set<String> = []
+
+    private func grapeTokens(category: String, deadlines: [EngineDeadline]) -> Set<String> {
+        Set(deadlines.compactMap { deadline in
+            guard let semanticKey = deadline.semanticKey, !semanticKey.isEmpty else { return nil }
+            return category + ":" + semanticKey
+        })
+    }
+
+    private func rememberGrapeTokens(_ tokens: Set<String>) {
+        guard !tokens.isEmpty else { return }
+        let previousCount = semanticGrapes.count
+        semanticGrapes.formUnion(tokens)
+        if semanticGrapes.count != previousCount {
+            defaults.set(semanticGrapes.sorted(), forKey: semanticGrapesKey)
+        }
+    }
     private var client: (any EngineServing)?
     private let runtime: (any EngineRuntimeManaging)?
     private let usesInjectedClient: Bool
@@ -79,6 +100,7 @@ final class ShellStore: ObservableObject {
         self.defaults = defaults
         classifiedPaths = Set(defaults.stringArray(forKey: "filepet.shell.inventory.paths.v1") ?? [])
         imageFingerprints = Set(defaults.stringArray(forKey: "filepet.shell.inventory.ocrFingerprints.v1") ?? [])
+        semanticGrapes = Set(defaults.stringArray(forKey: semanticGrapesKey) ?? [])
         categoryLabels = defaults.dictionary(forKey: "filepet.shell.inventory.labels.v1") as? [String: String] ?? [:]
         vine.setCategoryLabels(categoryLabels)
         self.pollInterval = pollInterval
@@ -249,12 +271,20 @@ final class ShellStore: ObservableObject {
                             categoryLabels[category] = resolved
                             vine.setCategoryLabels(categoryLabels)
                             defaults.set(categoryLabels, forKey: "filepet.shell.inventory.labels.v1")
+                            let semanticTokens = grapeTokens(category: category, deadlines: result.deadlines)
+                            let duplicateTaskCrop = fingerprint != nil &&
+                                !semanticTokens.isEmpty &&
+                                semanticTokens.isSubset(of: semanticGrapes)
                             let newPath = classifiedPaths.insert(identity).inserted
-                            if newPath && !duplicateContent {
+                            if newPath && !duplicateContent && !duplicateTaskCrop {
                                 vine.recordSuccess(category: category)
                                 newGrape = true
                             }
                             if newPath { defaults.set(classifiedPaths.sorted(), forKey: pathsKey) }
+                            // Remember the semantic identity whether this was a new
+                            // grape or an exact duplicate: existing fingerprint-only
+                            // histories get upgraded without changing their counts.
+                            if fingerprint != nil { rememberGrapeTokens(semanticTokens) }
                             do {
                                 let isGeneratedScreenshot =
                                     FileDisplayName.label(url.lastPathComponent) != url.lastPathComponent
@@ -339,7 +369,7 @@ final class ShellStore: ObservableObject {
                         let categorySummary = label == nil
                             ? (matchingPending == nil ? "分类待确认" : "相同截图已在待确认中") :
                             (newGrape ? "已新增分类葡萄" :
-                                (duplicateContent ? "相同截图已处理" : "分类葡萄已计数"))
+                                (duplicateContent ? "相同截图已处理" : "分类葡萄未重复增加"))
                         let deadlineSummary = !toReview.isEmpty
                             ? "\(toReview.count) 条 DDL 待核对"
                             : (result.deadlines.isEmpty ? "无 DDL" : "新增 \(added) 朵花")
@@ -414,11 +444,15 @@ final class ShellStore: ObservableObject {
         guard let label = categoryLabels[categoryID], !label.isEmpty else { return "请选择核心提供的分类。" }
         if classifiedPaths.insert(review.path).inserted {
             let duplicateContent = review.contentFingerprint.map { imageFingerprints.contains($0) } ?? false
-            if !duplicateContent {
+            let semanticTokens = grapeTokens(category: categoryID, deadlines: review.candidates)
+            let duplicateTaskCrop = review.contentFingerprint != nil &&
+                !semanticTokens.isEmpty && semanticTokens.isSubset(of: semanticGrapes)
+            if !duplicateContent && !duplicateTaskCrop {
                 vine.beginReceiving()
                 vine.recordSuccess(category: categoryID)
                 vine.scheduleSleep()
             }
+            if review.contentFingerprint != nil { rememberGrapeTokens(semanticTokens) }
             defaults.set(classifiedPaths.sorted(), forKey: pathsKey)
             if let digest = review.contentFingerprint, imageFingerprints.insert(digest).inserted {
                 defaults.set(imageFingerprints.sorted(), forKey: fingerprintsKey)
