@@ -4,7 +4,7 @@ import Foundation
 
 struct PendingFileReview: Identifiable, Codable, Equatable {
     let id: String
-    let path: String
+    var path: String
     let fileName: String
     let reason: String
     var candidates: [EngineDeadline]
@@ -76,6 +76,24 @@ final class FileReviewInbox: ObservableObject {
                 return nil
             }
             return next
+        }
+        if changed { save(updated) }
+    }
+
+    /// Keep pending candidates and their Open Source actions valid when
+    /// their image was safely moved after classification.
+    func relinkSource(from oldPath: String, to newPath: String) {
+        guard oldPath != newPath else { return }
+        var updated = items
+        var changed = false
+        for index in updated.indices where updated[index].path == oldPath {
+            updated[index].path = newPath
+            for candidateIndex in updated[index].candidates.indices {
+                if updated[index].candidates[candidateIndex].sourcePath == oldPath {
+                    updated[index].candidates[candidateIndex].sourcePath = newPath
+                }
+            }
+            changed = true
         }
         if changed { save(updated) }
     }
