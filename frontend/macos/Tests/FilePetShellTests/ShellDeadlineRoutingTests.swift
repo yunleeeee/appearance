@@ -145,6 +145,32 @@ final class ShellDeadlineRoutingTests: XCTestCase {
         XCTAssertEqual(again.reviewInbox.items[0].candidates.count, 1)
     }
 
+    func testTwoUnknownDuplicatesShareReviewAndManualConfirmationCountsOneGrape() async {
+        let (defaults, suite) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var uncertain = result(status: "needs_review", category: nil)
+        uncertain.contentFingerprint = String(repeating: "c", count: 64)
+        let one = file("已粘贴 2026-11-01 下午8.14.18.png")
+        let two = file("已粘贴 2026-11-02 下午8.14.18.png")
+        let store = makeStore(GardenShellEngine(results: [uncertain, uncertain]),
+                              defaults: defaults)
+        store.classifyFiles([one, two])
+        await store.waitUntilIdle()
+        XCTAssertEqual(store.reviewInbox.items.count, 1)
+        XCTAssertEqual(store.vine.totalGrapes, 0)
+        let pending = store.reviewInbox.items[0]
+        XCTAssertEqual(store.confirmCategory(reviewID: pending.id, categoryID: "learning"), nil)
+        XCTAssertEqual(store.vine.count(for: "learning"), 1)
+
+        var classified = result()
+        classified.contentFingerprint = uncertain.contentFingerprint
+        let reopened = makeStore(GardenShellEngine(results: [classified]),
+                                 defaults: UserDefaults(suiteName: suite)!)
+        reopened.classifyFiles([two])
+        await reopened.waitUntilIdle()
+        XCTAssertEqual(reopened.vine.count(for: "learning"), 1)
+    }
+
     private func isolatedDefaults() -> (UserDefaults, String) {
         let suite = "FilePetShell.ShellDeadlineRoutingTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
