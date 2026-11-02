@@ -10,7 +10,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var vinePanel: NSPanel?
     private var statusItem: NSStatusItem?
     private var dropInteraction: VineDropInteractionController?
-    private var theftOverlay: TheftOverlayController?
     private var flowerController: DeadlineFlowerController?
     private var reviewWindowController: ReviewWindowController?
     private var petVisible = true
@@ -26,6 +25,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private weak var applicationReviewMenuItem: NSMenuItem?
     private weak var automaticOCRMenuItem: NSMenuItem?
     private weak var applicationAutomaticOCRMenuItem: NSMenuItem?
+    private weak var archiveLocationMenuItem: NSMenuItem?
+    private weak var applicationArchiveLocationMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -41,19 +42,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         createMenuBar()
         createApplicationMenu()
-        theftOverlay = TheftOverlayController(model: store.vine)
         store.startConnectionMonitoring()
         store.$status.sink { [weak self] text in
             self?.statusItem?.button?.toolTip = text
         }.store(in: &cancellables)
-
-        store.vine.$activeTheft
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] event in
-                guard let self, let panel = self.vinePanel else { return }
-                self.theftOverlay?.present(self.petVisible ? event : nil, attachedTo: panel)
-            }
-            .store(in: &cancellables)
 
         store.$petVisible
             .receive(on: DispatchQueue.main)
@@ -124,11 +116,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             ) { [weak self] _ in
                 MainActor.assumeIsolated {
                     guard let panel = self?.vinePanel else { return }
-                    self?.theftOverlay?.dismiss()
-                    self?.store.vine.setTheftPresentationEnabled(false)
                     self?.positionPanel(panel, width: width, height: height, force: true)
                     self?.flowerController?.reposition()
-                    self?.store.vine.setTheftPresentationEnabled(self?.petVisible ?? false)
                 }
             }
     }
@@ -156,11 +145,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func setPanelVisible(_ visible: Bool) {
         petVisible = visible
         // The trellis may sleep or hide while deadline flowers remain present.
-        store.vine.setTheftPresentationEnabled(visible)
         if visible {
             vinePanel?.orderFrontRegardless()
         } else {
-            theftOverlay?.dismiss()
             dropInteraction?.finishSession()
             vinePanel?.orderOut(nil)
         }
@@ -191,6 +178,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let choose = NSMenuItem(title: "选择文件分类…", action: #selector(chooseFiles), keyEquivalent: "o")
         choose.target = self
         commands.addItem(choose)
+        let archive = NSMenuItem(title: archiveMenuTitle, action: #selector(chooseArchiveFolder), keyEquivalent: "s")
+        archive.keyEquivalentModifierMask = [.command, .shift]
+        archive.target = self
+        commands.addItem(archive)
+        applicationArchiveLocationMenuItem = archive
+        let disableArchive = NSMenuItem(title: "停止自动复制归档", action: #selector(disableArchive), keyEquivalent: "")
+        disableArchive.target = self
+        commands.addItem(disableArchive)
         let reviews = NSMenuItem(title: pendingReviewMenuTitle, action: #selector(showPendingReviews), keyEquivalent: "")
         reviews.target = self
         commands.addItem(reviews)
@@ -203,9 +198,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let results = NSMenuItem(title: "查看最近分类结果…", action: #selector(showResults), keyEquivalent: "")
         results.target = self
         commands.addItem(results)
-        let preview = NSMenuItem(title: "预览杰瑞偷葡萄", action: #selector(previewTheft), keyEquivalent: "")
-        preview.target = self
-        commands.addItem(preview)
         commands.addItem(.separator())
         let quit = NSMenuItem(title: "退出葡萄藤", action: #selector(quitApp), keyEquivalent: "q")
         quit.target = self
@@ -250,6 +242,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         choose.target = self
         menu.addItem(choose)
         classifyMenuItem = choose
+        let archive = NSMenuItem(title: archiveMenuTitle, action: #selector(chooseArchiveFolder), keyEquivalent: "")
+        archive.target = self
+        menu.addItem(archive)
+        archiveLocationMenuItem = archive
+        let disableArchive = NSMenuItem(title: "停止自动复制归档", action: #selector(disableArchive), keyEquivalent: "")
+        disableArchive.target = self
+        menu.addItem(disableArchive)
         let reviews = NSMenuItem(title: pendingReviewMenuTitle, action: #selector(showPendingReviews), keyEquivalent: "")
         reviews.target = self
         menu.addItem(reviews)
@@ -286,14 +285,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         preview.target = self
         menu.addItem(preview)
 
-        let theftPreview = NSMenuItem(
-            title: "预览杰瑞偷葡萄",
-            action: #selector(previewTheft),
-            keyEquivalent: ""
-        )
-        theftPreview.target = self
-        menu.addItem(theftPreview)
-
         menu.addItem(.separator())
 
         let quit = NSMenuItem(
@@ -308,6 +299,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem = item
     }
 
+    private var archiveMenuTitle: String {
+        guard let destination = store.archive.destination else {
+            return "选择分类文件保存位置…（未启用）"
+        }
+        return "分类文件保存至：" + destination.lastPathComponent + "…"
+    }
+
     private var pendingReviewMenuTitle: String {
         let count = store.reviewInbox.items.reduce(0) { $0 + max(1, $1.candidates.count) }
         return "待确认事项（\(count)）…"
@@ -316,6 +314,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         reviewMenuItem?.title = pendingReviewMenuTitle
         applicationReviewMenuItem?.title = pendingReviewMenuTitle
+        archiveLocationMenuItem?.title = archiveMenuTitle
+        applicationArchiveLocationMenuItem?.title = archiveMenuTitle
         let autoState: NSControl.StateValue = store.autoAcceptImageDeadlines ? .on : .off
         automaticOCRMenuItem?.state = autoState
         applicationAutomaticOCRMenuItem?.state = autoState
@@ -411,6 +411,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    /// One quick folder picker controls future classification copies.
+    /// Existing files remain untouched; users can disable the copy at any time.
+    @objc private func chooseArchiveFolder() {
+        let panel = NSOpenPanel()
+        panel.title = "分类文件保存位置"
+        panel.message = "分类成功后复制至此目录下的类别文件夹；原始文件保持不变。"
+        panel.prompt = "使用此文件夹"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        if let current = store.archive.destination { panel.directoryURL = current }
+        NSApp.activate(ignoringOtherApps: true)
+        if panel.runModal() == .OK, let chosen = panel.url {
+            store.archive.selectDestination(chosen)
+        }
+    }
+
+    @objc private func disableArchive() {
+        store.archive.selectDestination(nil)
+    }
+
     @objc private func chooseFiles() { store.chooseFiles() }
     func chooseFilesFromMenu() { store.chooseFiles() }
     @objc private func reconnectEngine() { store.refreshConnection() }
@@ -440,18 +462,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         store.vine.preview()
     }
 
-    @objc func previewTheft() {
-        store.petVisible = true
-        store.vine.setTheftPresentationEnabled(true)
-        store.vine.previewTheft()
-    }
-
     @objc private func quitApp() { NSApp.terminate(nil) }
 
     func applicationWillTerminate(_ notification: Notification) {
         store.stop()
         dropInteraction?.stop()
-        theftOverlay?.dismiss()
         flowerController?.stop()
         reviewWindowController?.close()
     }
