@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class DeadlineGardenTests: XCTestCase {
-    func testMultipleDeadlinesUseThreeUrgentVisibleSlots() {
+    func testMultipleDeadlinesUseOneUrgentVisibleSlot() {
         let (defaults, suite) = isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
         let garden = DeadlineGarden(defaults: defaults)
@@ -12,8 +12,8 @@ final class DeadlineGardenTests: XCTestCase {
         let candidates = (1...5).map { deadline("ddl-\($0)", day: 10 - $0) }
 
         XCTAssertEqual(garden.feed(candidates + [candidates[0], deadline("")], now: fedAt), 5)
-        XCTAssertEqual(garden.visibleDeadlines.map(\.id), ["ddl-5", "ddl-4", "ddl-3"])
-        XCTAssertEqual(garden.queuedCount, 2)
+        XCTAssertEqual(garden.visibleDeadlines.map(\.id), ["ddl-5"])
+        XCTAssertEqual(garden.queuedCount, 4)
         XCTAssertEqual(garden.activeDeadlines.count, 5)
         XCTAssertEqual(garden.deadlines.map(\.createdAt), Array(repeating: fedAt, count: 5))
         XCTAssertEqual(garden.feed(candidates, now: fedAt.addingTimeInterval(1)), 0)
@@ -28,17 +28,17 @@ final class DeadlineGardenTests: XCTestCase {
         let harvestedAt = Date(timeIntervalSince1970: 2_000)
 
         garden.harvest(id: "ddl-5", now: harvestedAt)
-        XCTAssertNil(garden.deadlines[4].completedAt, "A queued item has no clickable flower yet")
-        garden.harvest(id: "ddl-2", now: harvestedAt)
-        XCTAssertEqual(garden.deadlines[1].completedAt, harvestedAt)
-        XCTAssertEqual(garden.visibleDeadlines.map(\.id), ["ddl-1", "ddl-3", "ddl-4"])
-        XCTAssertEqual(garden.queuedCount, 1)
-
-        garden.harvest(id: "ddl-2", now: harvestedAt.addingTimeInterval(30))
-        XCTAssertEqual(garden.deadlines[1].completedAt, harvestedAt, "Repeated clicks must preserve completion")
+        XCTAssertNil(garden.deadlines[4].completedAt, "A queued item has no clickable flower")
         garden.harvest(id: "ddl-1", now: harvestedAt)
-        XCTAssertEqual(garden.visibleDeadlines.map(\.id), ["ddl-3", "ddl-4", "ddl-5"])
-        XCTAssertEqual(garden.queuedCount, 0)
+        XCTAssertEqual(garden.deadlines[0].completedAt, harvestedAt)
+        XCTAssertEqual(garden.visibleDeadlines.map(\.id), ["ddl-2"])
+        XCTAssertEqual(garden.queuedCount, 3)
+
+        garden.harvest(id: "ddl-1", now: harvestedAt.addingTimeInterval(30))
+        XCTAssertEqual(garden.deadlines[0].completedAt, harvestedAt)
+        garden.harvest(id: "ddl-2", now: harvestedAt)
+        XCTAssertEqual(garden.visibleDeadlines.map(\.id), ["ddl-3"])
+        XCTAssertEqual(garden.queuedCount, 2)
     }
 
     func testCompletionAndDetailsPersistAndRepeatedFeedCannotReviveFlower() {
