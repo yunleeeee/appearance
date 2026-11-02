@@ -10,6 +10,11 @@ enum FileDisplayName {
         if stem.range(of: generated, options: [.regularExpression, .caseInsensitive]) != nil {
             return "截图"
         }
+        if ["screen", "image", "photo", "picture", "screenshot", "screencapture",
+            "clipboard", "capture", "untitled", "无标题", "截图", "图片", "屏幕快照"]
+            .contains(stem.lowercased()) {
+            return "图片"
+        }
         if stem.range(of: #"^(?:IMG|DSC|PXL)[_-]\d{4,}(?:[_-]\d+)*$"#,
                       options: [.regularExpression, .caseInsensitive]) != nil {
             return "图片"
