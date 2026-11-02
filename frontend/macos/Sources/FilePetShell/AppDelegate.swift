@@ -172,9 +172,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         commands.addItem(.separator())
         let flowers = NSMenuItem(title: "DDL 花朵：悬停查看，点击收获", action: nil, keyEquivalent: "")
         commands.addItem(flowers)
-        let gardenPreview = NSMenuItem(title: "预览葡萄架", action: #selector(previewVine), keyEquivalent: "")
-        gardenPreview.target = self
-        commands.addItem(gardenPreview)
         let choose = NSMenuItem(title: "选择文件分类…", action: #selector(chooseFiles), keyEquivalent: "o")
         choose.target = self
         commands.addItem(choose)
@@ -276,14 +273,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         )
         toggle.target = self
         menu.addItem(toggle)
-
-        let preview = NSMenuItem(
-            title: "预览葡萄架",
-            action: #selector(previewVine),
-            keyEquivalent: ""
-        )
-        preview.target = self
-        menu.addItem(preview)
 
         menu.addItem(.separator())
 
@@ -455,11 +444,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func toggleVine() {
         store.petVisible.toggle()
-    }
-
-    @objc private func previewVine() {
-        store.petVisible = true
-        store.vine.preview()
     }
 
     @objc private func quitApp() { NSApp.terminate(nil) }
