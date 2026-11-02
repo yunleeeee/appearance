@@ -33,7 +33,9 @@ final class FileReviewInbox: ObservableObject {
     func enqueue(result: EngineClassificationResult, candidates: [EngineDeadline]? = nil, needsCategoryReview: Bool? = nil) {
         let path = URL(fileURLWithPath: result.path).standardizedFileURL.path
         let previous = items.first { $0.id == path }
-        let proposed = candidates ?? result.deadlines
+        let incoming = candidates ?? result.deadlines
+        // Refeeding the same source cannot silently erase its unresolved candidates.
+        let proposed = incoming.isEmpty ? (previous?.candidates ?? []) : incoming
         let reason = proposed.contains(where: \.requiresConfirmation)
             ? "图片中的截止日期需要核对，请确认内容、时间和项目。" : result.reason
         let review = PendingFileReview(id: path, path: path, fileName: result.fileName,
