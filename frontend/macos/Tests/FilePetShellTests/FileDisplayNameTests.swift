@@ -7,6 +7,8 @@ final class FileDisplayNameTests: XCTestCase {
         XCTAssertEqual(FileDisplayName.label("屏幕快照 2026-11-01 下午8.14.18.png"), "截图")
         XCTAssertEqual(FileDisplayName.label("Screenshot 2026-11-01 at 8.14.18 PM.png"), "截图")
         XCTAssertEqual(FileDisplayName.label("IMG_20261101_201418.jpg"), "图片")
+        XCTAssertEqual(FileDisplayName.label("screen.png"), "图片")
+        XCTAssertEqual(FileDisplayName.label("image.jpg"), "图片")
     }
 
     func testMeaningfulNamesRemainVisible() {
