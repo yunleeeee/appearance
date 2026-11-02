@@ -55,6 +55,31 @@ final class FileReviewInbox: ObservableObject {
         save(updated)
     }
 
+    /// Remove an older OCR review when the same semantic task has now been
+    /// accepted automatically. Keep unrelated candidates and category reviews.
+    /// Never discards the original image or any stored completed garden item.
+    func removeAutomaticallyAccepted(_ accepted: [EngineDeadline]) {
+        guard !accepted.isEmpty else { return }
+        let ids = Set(accepted.map(\.id))
+        let keys = Set(accepted.compactMap(\.semanticKey))
+        var changed = false
+        let updated = items.compactMap { review -> PendingFileReview? in
+            var next = review
+            let count = next.candidates.count
+            next.candidates.removeAll { candidate in
+                ids.contains(candidate.id) ||
+                    (candidate.semanticKey.map { keys.contains($0) } ?? false)
+            }
+            if next.candidates.count != count { changed = true }
+            if next.candidates.isEmpty && next.needsCategoryReview != true {
+                changed = true
+                return nil
+            }
+            return next
+        }
+        if changed { save(updated) }
+    }
+
     func remove(id: String) { save(items.filter { $0.id != id }) }
 
     func resolveCandidate(reviewID: String, candidateID: String?) {
