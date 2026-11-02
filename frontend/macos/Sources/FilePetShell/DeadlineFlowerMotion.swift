@@ -102,7 +102,7 @@ enum DeadlineFlowerMotion {
               let sprite = leaf else { return [] }
         let controls = stemControls(g: g, stem: stem, pose: pose)
         let placements: [(CGFloat, CGFloat, CGFloat)] = [
-            (0.59, -1, 2.20), // upper, broad left leaf
+            (0.52, -1, 2.20), // first leaf sits lower: longer calm stem below the crown
             (0.36, 1, 1.95),  // mid-stem right leaf
             (0.17, -1, 1.35)  // restrained basal shoot restores the old silhouette
         ]
