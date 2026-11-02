@@ -13,6 +13,7 @@ struct GardenDeadline: Identifiable, Codable, Equatable {
     var completedAt: Date?
     // Optional addition: old v1 UserDefaults records remain decodable.
     var sourcePath: String? = nil
+    var semanticKey: String? = nil // Optional for legacy v1 persistence
 }
 
 @MainActor
@@ -80,12 +81,17 @@ final class DeadlineGarden: ObservableObject {
     @discardableResult
     func feed(_ candidates: [EngineDeadline], now: Date = Date()) -> Int {
         var known = Set(deadlines.map(\.id))
-        let added = candidates.filter { !$0.id.isEmpty && known.insert($0.id).inserted }.map {
+        var semantic = Set(deadlines.compactMap(\.semanticKey))
+        let added = candidates.filter { candidate in
+            guard !candidate.id.isEmpty, known.insert(candidate.id).inserted else { return false }
+            guard let key = candidate.semanticKey, !key.isEmpty else { return true }
+            return semantic.insert(key).inserted
+        }.map {
             GardenDeadline(id: $0.id, title: $0.title, project: $0.project,
                            dueDate: $0.dueDate, dueTime: $0.dueTime,
                            yearInferred: $0.yearInferred, evidence: $0.evidence,
                            createdAt: now, completedAt: nil,
-                           sourcePath: $0.sourcePath)
+                           sourcePath: $0.sourcePath, semanticKey: $0.semanticKey)
         }
         guard !added.isEmpty else { return 0 }
         save(deadlines + added)
@@ -114,7 +120,8 @@ final class DeadlineGarden: ObservableObject {
         updated[index] = GardenDeadline(id: id, title: title, project: project,
             dueDate: dueDate, dueTime: dueTime, yearInferred: false,
             evidence: previous.evidence, createdAt: previous.createdAt,
-            completedAt: previous.completedAt, sourcePath: previous.sourcePath)
+            completedAt: previous.completedAt, sourcePath: previous.sourcePath,
+            semanticKey: previous.semanticKey)
         save(updated)
         return persistenceError
     }
