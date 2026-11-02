@@ -244,7 +244,7 @@ final class ShellStore: ObservableObject {
                             return true
                         }
                         let added = garden.feed(result.deadlines.filter { !$0.requiresConfirmation })
-                        if let fingerprint, label != nil || !result.deadlines.isEmpty {
+                        if let fingerprint, label != nil {
                             if imageFingerprints.insert(fingerprint).inserted {
                                 defaults.set(imageFingerprints.sorted(), forKey: fingerprintsKey)
                             }
@@ -322,7 +322,7 @@ final class ShellStore: ObservableObject {
         let id = candidate?.id ?? DeadlineInput.manualID(path: review.path, title: title, dueDate: date, dueTime: optionalTime)
         let confirmed = EngineDeadline(id: id, title: title, project: project, dueDate: date,
             dueTime: optionalTime, yearInferred: false, evidence: candidate?.evidence ?? "用户补充：" + title,
-            signal: "user_confirmed")
+            signal: "user_confirmed", semanticKey: candidate?.semanticKey)
         garden.feed([confirmed])
         if let error = garden.persistenceError { return error }
         reviewInbox.resolveCandidate(reviewID: reviewID, candidateID: candidateID)
