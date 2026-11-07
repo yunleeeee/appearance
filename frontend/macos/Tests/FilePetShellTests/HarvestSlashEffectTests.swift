@@ -114,6 +114,33 @@ final class HarvestSlashEffectTests: XCTestCase {
         XCTAssertFalse(overlay.isOpaque)
     }
 
+    func testExpandedSwordBeamIsVisibleOutsideTheFlowerPanel() throws {
+        let flower = DeadlineFlowerView(artwork: CompactFlowerArtwork.plants[1])
+        flower.deadlineStage = .bloom
+        flower.previewHarvestAge = 0.205
+        let overlay = HarvestEffectOverlayView(flower: flower)
+        let wide = try bitmap(for: overlay)
+        let pixelWidth = Int(ceil(overlay.bounds.width))
+        let pixelHeight = Int(ceil(overlay.bounds.height))
+        let leftLimit = Int(HarvestEffectOverlayView.bleed)
+        let rightLimit = leftLimit + Int(ceil(flower.bounds.width))
+        var paintedOutsideOriginalPanel = 0
+        for y in 0..<pixelHeight {
+            for x in 0..<pixelWidth where x < leftLimit || x >= rightLimit {
+                if wide[(y * pixelWidth + x) * 4 + 3] > 0 {
+                    paintedOutsideOriginalPanel += 1
+                }
+            }
+        }
+        XCTAssertGreaterThan(paintedOutsideOriginalPanel, 0,
+            "A long sword-light trail must not be clipped by the original flower panel")
+
+        flower.previewHarvestAge = nil
+        flower.renderHarvestInOverlay = true
+        XCTAssertTrue(try bitmap(for: flower).allSatisfy { $0 == 0 },
+                      "The spent sprite must not flash back while awaiting queue sync")
+    }
+
     func testFullScreenAndUserHideCancelHarvestWithoutCompletingTask() async throws {
         _ = NSApplication.shared
         let suite = "FilePetShell.HarvestVisibility.\(UUID().uuidString)"
@@ -193,9 +220,9 @@ final class HarvestSlashEffectTests: XCTestCase {
         XCTAssertTrue(try bitmap(for: flower).allSatisfy { $0 == 0 })
     }
 
-    private func bitmap(for flower: DeadlineFlowerView) throws -> [UInt8] {
-        let width = Int(ceil(flower.bounds.width))
-        let height = Int(ceil(flower.bounds.height))
+    private func bitmap(for view: NSView) throws -> [UInt8] {
+        let width = Int(ceil(view.bounds.width))
+        let height = Int(ceil(view.bounds.height))
         let bitmap = try XCTUnwrap(NSBitmapImageRep(
             bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
@@ -204,7 +231,7 @@ final class HarvestSlashEffectTests: XCTestCase {
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = graphics
         graphics.cgContext.clear(CGRect(x: 0, y: 0, width: width, height: height))
-        flower.draw(flower.bounds)
+        view.draw(view.bounds)
         graphics.flushGraphics()
         NSGraphicsContext.restoreGraphicsState()
         let raw = try XCTUnwrap(bitmap.bitmapData)
