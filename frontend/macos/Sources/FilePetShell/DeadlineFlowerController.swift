@@ -52,7 +52,9 @@ final class DeadlineFlowerController {
                 forName: Notification.Name(name), object: nil, queue: .main
             ) { [weak self] _ in MainActor.assumeIsolated { self?.garden.refreshTime() } }))
         }
-        garden.refreshTime()
+        // DeadlineGarden already owns the injected/current clock. Replacing it
+        // with Date() here breaks deterministic stage/queue behavior in tests
+        // (and causes a visibly wrong first flower after clock recovery).
         synchronize()
         scheduleWind()
     }
