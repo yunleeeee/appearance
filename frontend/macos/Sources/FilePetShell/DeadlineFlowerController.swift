@@ -127,7 +127,7 @@ final class DeadlineFlowerController {
         for deadline in desired {
             if let previous = existing[deadline.id] {
                 previous.view.deadlineStage = garden.stage(for: deadline)
-                previous.view.setAccessibilityLabel("\(deadline.title)，\(deadline.dueDate)")
+                previous.view.setAccessibilityLabel("\(deadline.title)，\(deadline.dueDate)，双击采摘并标记已完成")
                 reserved.insert(previous.slot)
                 next.append((deadline, previous.panel, previous.view, previous.slot))
             }
