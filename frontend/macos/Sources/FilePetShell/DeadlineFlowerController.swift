@@ -318,11 +318,15 @@ final class DeadlineFlowerController {
         }
         flower.view.beginHarvestEffect { [weak self] in
             guard let self else { return }
-            self.finishHarvestOverlay(id: id)
+            self.finishHarvestOverlay(id: id, restoreFlower: false)
             self.animatingHarvest.remove(id)
             // Only an explicit double-click (or accessibility press) completes
             // the task. Never confuse an overdue wilt with harvesting.
             self.garden.harvest(id: id)
+            if self.garden.deadlines.first(where: { $0.id == id })?.completedAt == nil {
+                // A persistence failure must not leave the task invisible.
+                flower.view.renderHarvestInOverlay = false
+            }
         }
         if let overlay = harvestOverlays[id] {
             overlay.panel.orderFrontRegardless()
@@ -330,11 +334,13 @@ final class DeadlineFlowerController {
         }
     }
 
-    private func finishHarvestOverlay(id: String) {
+    private func finishHarvestOverlay(id: String, restoreFlower: Bool = true) {
         guard let overlay = harvestOverlays.removeValue(forKey: id) else { return }
         overlay.view.stop()
         overlay.panel.orderOut(nil)
-        flowers.first(where: { $0.deadline.id == id })?.view.renderHarvestInOverlay = false
+        if restoreFlower {
+            flowers.first(where: { $0.deadline.id == id })?.view.renderHarvestInOverlay = false
+        }
     }
 
     private func cancelAllHarvestOverlays() {
@@ -607,6 +613,10 @@ final class DeadlineFlowerView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         NSGraphicsContext.current?.imageInterpolation = .none
+        // Keep the spent flower transparent until its existing panel has been
+        // retired by the garden observer; otherwise it flashes back for one
+        // frame between timer completion and async queue synchronization.
+        if renderHarvestInOverlay && previewHarvestAge == nil { return }
         if let stage = deadlineStage, previewHarvestAge != nil || harvestStart != nil {
             if renderHarvestInOverlay && previewHarvestAge == nil { return }
             let age = previewHarvestAge
@@ -644,7 +654,8 @@ final class DeadlineFlowerView: NSView {
     }
 
     func containsArtwork(_ point: NSPoint) -> Bool {
-        guard harvestStart == nil, bounds.contains(point) else { return false }
+        guard harvestStart == nil, !renderHarvestInOverlay,
+              bounds.contains(point) else { return false }
         if let stage = deadlineStage, DeadlineFlowerMotion.heads.count == 6 {
             return DeadlineFlowerMotion.hit(point, bounds: bounds, artwork: artwork,
                 stage: stage, stem: force(lag: 0), head: force(lag: 0.115),
