@@ -18,6 +18,7 @@ final class DeadlineFlowerController {
     private var clockObservers: [(NotificationCenter, NSObjectProtocol)] = []
     private var popover: NSPopover?
     private var hoveredID: String?
+    private var animatingHarvest = Set<String>()
     private var visible = true
 
     // Observable identity seam for native window lifecycle regressions.
@@ -104,10 +105,18 @@ final class DeadlineFlowerController {
         closeDetails()
         flowers.forEach { $0.panel.orderOut(nil) }
         flowers = []
+        animatingHarvest.removeAll()
     }
 
     private func synchronize() {
-        let desired = garden.visibleDeadlines
+        // An in-flight harvest keeps its existing panel/slot until its shards
+        // reach the ground; only then can the next queued DDL replace it.
+        let pinned = flowers.filter { animatingHarvest.contains($0.deadline.id) }
+            .map(\.deadline)
+        let available = max(0, garden.visibleLimit - pinned.count)
+        let desired = pinned + Array(garden.visibleDeadlines.filter {
+            !animatingHarvest.contains($0.id)
+        }.prefix(available))
         let desiredIDs = Set(desired.map(\.id))
         let existing = Dictionary(uniqueKeysWithValues: flowers.map { ($0.deadline.id, $0) })
         var next: [(deadline: GardenDeadline, panel: NSPanel, view: DeadlineFlowerView, slot: Int)] = []
@@ -131,7 +140,7 @@ final class DeadlineFlowerController {
             view.onFiles = onFiles
             view.setAccessibilityElement(true)
             view.setAccessibilityRole(.button)
-            view.setAccessibilityLabel("\(deadline.title)，\(deadline.dueDate)，点击确认完成")
+            view.setAccessibilityLabel("\(deadline.title)，\(deadline.dueDate)，双击采摘并标记已完成")
             let panel = NSPanel(contentRect: NSRect(origin: .zero, size: artwork.size),
                                 styleMask: [.borderless, .nonactivatingPanel],
                                 backing: .buffered, defer: false)
@@ -222,14 +231,21 @@ final class DeadlineFlowerController {
     }
 
     private func requestHarvest(id: String) {
-        guard garden.visibleDeadlines.contains(where: { $0.id == id }) else { return }
-        let alert = NSAlert()
-        alert.messageText = "确认任务已完成并采摘花朵？"
-        alert.informativeText = "逾期不会自动完成。误操作可通过菜单撤销最近一次采摘。"
-        alert.addButton(withTitle: "确认完成")
-        alert.addButton(withTitle: "取消")
-        NSApp.activate(ignoringOtherApps: true)
-        if alert.runModal() == .alertFirstButtonReturn { garden.harvest(id: id) }
+        guard !animatingHarvest.contains(id),
+              garden.visibleDeadlines.contains(where: { $0.id == id }),
+              let flower = flowers.first(where: { $0.deadline.id == id }) else { return }
+        animatingHarvest.insert(id)
+        closeDetails()
+        // The overlay stays click-through during the sword cuts and falling
+        // shards. No NSAlert or focus-stealing confirmation is ever presented.
+        flower.panel.ignoresMouseEvents = true
+        flower.view.beginHarvestEffect { [weak self] in
+            guard let self else { return }
+            self.animatingHarvest.remove(id)
+            // Only an explicit double-click (or accessibility press) completes
+            // the task. Never confuse an overdue wilt with harvesting.
+            self.garden.harvest(id: id)
+        }
     }
 
     private func updatePointer() {
@@ -342,6 +358,8 @@ final class DeadlineFlowerView: NSView {
     let artwork: CompactFlowerArtwork
     var onHarvest: (() -> Void)?
     var onFiles: (([URL]) -> Void)?
+    // Deterministic render seam for testing the original harvest effect.
+    var previewHarvestAge: TimeInterval?
     // Deterministic render seams for CI visual proofs; nil during ordinary runtime.
     var previewWindAge: TimeInterval?
     var previewTransition: (from: DeadlineStage, progress: CGFloat)?
@@ -373,7 +391,24 @@ final class DeadlineFlowerView: NSView {
     private var transitionStart: Date?
     private var gustStart: Date?
     private var gustStrength: CGFloat = 0
+    private var harvestStart: Date?
+    private var harvestCompletion: (() -> Void)?
     private var frames: Timer?
+
+    var isHarvesting: Bool { harvestStart != nil }
+
+    func beginHarvestEffect(completion: @escaping () -> Void) {
+        guard harvestStart == nil else { return }
+        // The FX takes over the crown; it must not restart the weather sway
+        // or a stage transition while the bloom is being sliced.
+        gustStart = nil
+        previousStage = nil
+        transitionStart = nil
+        harvestStart = Date()
+        harvestCompletion = completion
+        needsDisplay = true
+        startFrames(duration: HarvestSlashEffect.duration)
+    }
 
     func startGust(strength: CGFloat) {
         guard !reduceMotion else { return }
@@ -396,10 +431,24 @@ final class DeadlineFlowerView: NSView {
                 let now = Date()
                 let gusting = self.gustStart.map { now.timeIntervalSince($0) < 2.5 } ?? false
                 let changing = self.transitionStart.map { now.timeIntervalSince($0) < 0.34 } ?? false
+                let harvestDuration = self.reduceMotion
+                    ? HarvestSlashEffect.reducedDuration : HarvestSlashEffect.duration
+                let harvesting = self.harvestStart.map {
+                    now.timeIntervalSince($0) < harvestDuration
+                } ?? false
                 if !gusting { self.gustStart = nil }
                 if !changing { self.previousStage = nil; self.transitionStart = nil }
                 self.needsDisplay = true
-                if !gusting && !changing { timer.invalidate(); self.frames = nil }
+                if self.harvestStart != nil && !harvesting {
+                    self.harvestStart = nil
+                    let completion = self.harvestCompletion
+                    self.harvestCompletion = nil
+                    completion?()
+                }
+                if !gusting && !changing && !harvesting {
+                    timer.invalidate()
+                    self.frames = nil
+                }
             }
         }
         timer.tolerance = 0.004
@@ -439,6 +488,14 @@ final class DeadlineFlowerView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         NSGraphicsContext.current?.imageInterpolation = .none
+        if let stage = deadlineStage, previewHarvestAge != nil || harvestStart != nil {
+            let age = previewHarvestAge
+                ?? Date().timeIntervalSince(harvestStart ?? Date())
+            HarvestSlashEffect.draw(in: bounds, stage: stage, artwork: artwork,
+                crownScale: crownScale, pose: plantPose,
+                age: age, reduceMotion: reduceMotion)
+            return
+        }
         if let stage = deadlineStage, DeadlineFlowerMotion.heads.count == 6 {
             let stem = force(lag: 0), head = force(lag: 0.115)
             let petals = (force(lag: 0.17), force(lag: 0.20), force(lag: 0.235))
@@ -467,7 +524,7 @@ final class DeadlineFlowerView: NSView {
     }
 
     func containsArtwork(_ point: NSPoint) -> Bool {
-        guard bounds.contains(point) else { return false }
+        guard harvestStart == nil, bounds.contains(point) else { return false }
         if let stage = deadlineStage, DeadlineFlowerMotion.heads.count == 6 {
             return DeadlineFlowerMotion.hit(point, bounds: bounds, artwork: artwork,
                 stage: stage, stem: force(lag: 0), head: force(lag: 0.115),
@@ -479,12 +536,18 @@ final class DeadlineFlowerView: NSView {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? { containsArtwork(point) ? self : nil }
-    override func mouseDown(with event: NSEvent) { press = convert(event.locationInWindow, from: nil) }
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        press = containsArtwork(point) && !isHarvesting ? point : nil
+    }
     override func mouseUp(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         let origin = press
         press = nil
-        guard let origin, hypot(point.x - origin.x, point.y - origin.y) < 6, containsArtwork(point) else { return }
+        guard let origin,
+              HarvestGesturePolicy.accepts(clickCount: event.clickCount,
+                 displacement: hypot(point.x - origin.x, point.y - origin.y),
+                 onArtwork: containsArtwork(point)) else { return }
         onHarvest?()
     }
 
