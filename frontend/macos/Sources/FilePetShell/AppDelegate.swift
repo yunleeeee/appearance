@@ -180,7 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         commands.addItem(summary)
         applicationSummaryMenuItem = summary
         commands.addItem(.separator())
-        let flowers = NSMenuItem(title: "DDL 花朵：悬停查看，点击收获", action: nil, keyEquivalent: "")
+        let flowers = NSMenuItem(title: "DDL 花朵：悬停查看，双击采摘", action: nil, keyEquivalent: "")
         commands.addItem(flowers)
         let gardenPreview = NSMenuItem(title: "预览葡萄架", action: #selector(previewVine), keyEquivalent: "")
         gardenPreview.target = self
@@ -229,7 +229,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         summary.isEnabled = false
         menu.addItem(summary)
         summaryMenuItem = summary
-        let flowers = NSMenuItem(title: "DDL 花朵：悬停查看，点击收获", action: nil, keyEquivalent: "")
+        let flowers = NSMenuItem(title: "DDL 花朵：悬停查看，双击采摘", action: nil, keyEquivalent: "")
         flowers.isEnabled = false
         menu.addItem(flowers)
         flowerMenuItem = flowers
@@ -301,7 +301,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         engineMenuItem?.title = store.connectionStatus
         summaryMenuItem?.title = store.status
         classifyMenuItem?.isEnabled = !store.isBusy
-        flowerMenuItem?.title = "DDL 花朵：\(store.garden.visibleDeadlines.count) 朵，\(store.garden.queuedCount) 项排队 · 点击收获"
+        flowerMenuItem?.title = "DDL 花朵：\(store.garden.visibleDeadlines.count) 朵，\(store.garden.queuedCount) 项排队 · 双击采摘"
     }
 
     @objc private func chooseFiles() { store.chooseFiles() }
