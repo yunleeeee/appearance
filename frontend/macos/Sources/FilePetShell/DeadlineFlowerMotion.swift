@@ -261,7 +261,8 @@ enum DeadlineFlowerMotion {
     static func draw(bounds: NSRect, artwork: CompactFlowerArtwork, stage: DeadlineStage,
                      stem: CGFloat, head: CGFloat,
                      petals: (CGFloat, CGFloat, CGFloat), crownScale: CGFloat = 1,
-                     pose: DeadlineFlowerArrangement.PlantPose = .solo) -> Bool {
+                     pose: DeadlineFlowerArrangement.PlantPose = .solo,
+                     showHead: Bool = true) -> Bool {
         guard let g = geometry(bounds: bounds, artwork: artwork, stage: stage,
                                stem: stem, head: head, crownScale: crownScale,
                                pose: pose) else { return false }
@@ -289,6 +290,9 @@ enum DeadlineFlowerMotion {
         // Leaves are behind the head, and follow wind just after the stalk.
         drawLeaves(leaves(bounds: bounds, artwork: artwork, stage: stage, stem: stem,
                           head: head, leafLag: (petals.0 - stem), pose: pose))
+        // During a successful harvest the stem/leaf silhouette fades while
+        // the crown is rendered as separate falling fragments.
+        if !showHead { return true }
         let sprite = heads[stage.rawValue]
         guard let context = NSGraphicsContext.current?.cgContext else { return false }
         if stage == .bloom {
