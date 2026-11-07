@@ -40,6 +40,7 @@ struct EngineClassificationResult: Codable, Equatable, Sendable {
     let reason: String
     let extractionChars: Int
     var deadlines: [EngineDeadline] = []
+    var contentFingerprint: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case path, status, confidence, reason
@@ -49,6 +50,7 @@ struct EngineClassificationResult: Codable, Equatable, Sendable {
         case matchedKeywords = "matched_keywords"
         case extractionChars = "extraction_chars"
         case deadlines
+        case contentFingerprint = "content_fingerprint"
     }
 }
 
@@ -65,6 +67,7 @@ extension EngineClassificationResult {
         reason = try values.decode(String.self, forKey: .reason)
         extractionChars = try values.decode(Int.self, forKey: .extractionChars)
         deadlines = try values.decodeIfPresent([EngineDeadline].self, forKey: .deadlines) ?? []
+        contentFingerprint = try values.decodeIfPresent(String.self, forKey: .contentFingerprint)
     }
 }
 
@@ -77,11 +80,25 @@ struct EngineDeadline: Codable, Equatable, Sendable, Identifiable {
     let yearInferred: Bool
     let evidence: String
     var signal: String? = nil
+    var status: String? = nil
+    var confirmationRequired: Bool? = nil
+    var sourcePath: String? = nil
+    var semanticKey: String? = nil
+    var reliability: String? = nil
+    var reliabilityReason: String? = nil
+    var titleInferred: Bool? = nil
 
-    var requiresConfirmation: Bool { signal == "ocr_deadline" }
+    var requiresConfirmation: Bool {
+        confirmationRequired == true || yearInferred || signal == "ocr_deadline"
+    }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, project, evidence, signal
+        case id, title, project, evidence, signal, status
+        case confirmationRequired = "confirmation_required"
+        case sourcePath = "source_path"
+        case semanticKey = "semantic_key"
+        case reliability, titleInferred = "title_inferred"
+        case reliabilityReason = "reliability_reason"
         case dueDate = "due_date"
         case dueTime = "due_time"
         case yearInferred = "year_inferred"

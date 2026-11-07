@@ -1,0 +1,64 @@
+name: macOS Swift tests
+
+on:
+  push:
+    branches:
+      - feat/filepet-deadline-pipeline-20261031
+    paths:
+      - 'frontend/macos/**'
+      - '.github/workflows/macos-swift-test.yml'
+  pull_request:
+    paths:
+      - 'frontend/macos/**'
+      - '.github/workflows/macos-swift-test.yml'
+
+jobs:
+  swift-test:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: frontend/macos
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode and Swift
+        run: xcodebuild -version && swift --version
+      - name: Test native macOS shell and render v2 proofs
+        env:
+          FILEPET_VISUAL_PROOFS: ${{ github.workspace }}/artifacts/flower-v2
+          FILEPET_RENDER_COMPACT: "1"
+          FILEPET_COMPACT_PROOF_DIR: ${{ github.workspace }}/artifacts/grape-vine
+        run: swift test --parallel
+      - name: Encode runtime stage and breeze captures
+        if: always()
+        env:
+          PROOFS: ${{ github.workspace }}/artifacts/flower-v2
+        run: |
+          if [ ! -d "$PROOFS/six-stages" ]; then
+            echo "Renderer did not produce proofs (likely build/test failure)."
+            exit 0
+          fi
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            brew install ffmpeg || true
+          fi
+          if command -v ffmpeg >/dev/null 2>&1; then
+            ffmpeg -hide_banner -loglevel error -y -framerate 24 \
+              -i "$PROOFS/stage-change-frames/frame-%03d.png" \
+              -c:v libx264 -pix_fmt yuv420p "$PROOFS/stage-change.mp4"
+            ffmpeg -hide_banner -loglevel error -y -framerate 24 \
+              -i "$PROOFS/resident-breeze-frames/frame-%03d.png" \
+              -c:v libx264 -pix_fmt yuv420p "$PROOFS/resident-breeze.mp4"
+          else
+            echo "ffmpeg unavailable: PNG frame sequences remain for reproduction."
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: filepet-flower-v2-runtime-proofs
+          path: artifacts/flower-v2
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: filepet-grape-vine-pixel-proofs
+          path: artifacts/grape-vine
+          if-no-files-found: warn

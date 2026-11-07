@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class ShellReviewConfirmationTests: XCTestCase {
-    func testOCRDeadlineWaitsForConfirmationAndOpensTheReviewEntry() async throws {
+    func testOCRDeadlineWaitsQuietlyForOptionalReview() async throws {
         let (defaults, suite) = isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
         let source = candidate("ocr-one", signal: "ocr_deadline")
@@ -19,12 +19,12 @@ final class ShellReviewConfirmationTests: XCTestCase {
         XCTAssertEqual(store.reviewInbox.items[0].candidates, [source])
         XCTAssertTrue(store.garden.deadlines.isEmpty, "An uncertain OCR reading needs a human decision")
         XCTAssertEqual(store.vine.totalGrapes, 0)
-        XCTAssertEqual(reviewPresentations, 1, "A new pending batch must expose its actionable review window")
+        XCTAssertEqual(reviewPresentations, 0, "Optional review remains in the menu without interrupting the user")
         let reviewID = try XCTUnwrap(store.reviewInbox.items.first?.id)
         XCTAssertNil(store.confirmDeadline(reviewID: reviewID, candidateID: source.id,
                                           title: "第二次作业", project: "软件工程",
                                           dueDate: "2026-10-18", dueTime: "23:59"))
-        XCTAssertTrue(store.reviewInbox.items.isEmpty)
+        XCTAssertEqual(store.reviewInbox.items.count, 1, "Category review remains after accepting OCR")
         XCTAssertEqual(store.garden.visibleDeadlines.count, 1)
         XCTAssertEqual(store.garden.deadlines.first?.id, source.id)
         XCTAssertEqual(store.garden.deadlines.first?.title, "第二次作业")
@@ -34,6 +34,43 @@ final class ShellReviewConfirmationTests: XCTestCase {
         _ = store.confirmDeadline(reviewID: reviewID, candidateID: source.id,
                                   title: "第二次作业", project: "软件工程", dueDate: "2026-10-18", dueTime: "23:59")
         XCTAssertEqual(store.garden.deadlines.count, 1, "Repeated presses must not create duplicate flowers")
+    }
+
+    func testUnclassifiedOrdinaryFileDoesNotPopUpOrCreatePhantomGrapes() async {
+        let (defaults, suite) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = makeStore([result(candidates: [])], defaults: defaults)
+        var presentations = 0
+        store.onShowPendingReviews = { presentations += 1 }
+        store.classifyFiles([file("unrecognized.txt")])
+        await store.waitUntilIdle()
+        XCTAssertEqual(presentations, 0)
+        XCTAssertEqual(store.reviewInbox.items.count, 1)
+        XCTAssertTrue(store.garden.deadlines.isEmpty)
+        XCTAssertEqual(store.vine.totalGrapes, 0)
+        XCTAssertEqual(store.results.first?.outcome, .needsReview)
+    }
+
+    func testClassifiedFileWithOCRCandidateStillDoesNotForceAWindow() async {
+        let (defaults, suite) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let source = candidate("ocr-quiet", signal: "ocr_deadline")
+        let response = EngineClassificationResult(
+            path: "/tmp/placeholder.png", fileName: "placeholder.png",
+            status: "classified", categoryID: "learning", categoryLabel: "课程与学习",
+            confidence: 0.8, matchedKeywords: ["课程"], reason: "内容匹配",
+            extractionChars: 140, deadlines: [source])
+        let store = makeStore([response], defaults: defaults)
+        var presentations = 0
+        store.onShowPendingReviews = { presentations += 1 }
+        store.classifyFiles([file("classroom.png")])
+        await store.waitUntilIdle()
+        XCTAssertEqual(presentations, 0)
+        XCTAssertEqual(store.vine.count(for: "learning"), 1,
+            "Successful classification still grows a grape")
+        XCTAssertEqual(store.reviewInbox.items.first?.candidates.count, 1)
+        XCTAssertTrue(store.garden.deadlines.isEmpty,
+            "Uncertain OCR must not schedule an unconfirmed flower")
     }
 
     func testSeveralOCRCandidatesConfirmIndependentlyAndUseTheThreeFlowerQueue() async throws {
@@ -53,12 +90,12 @@ final class ShellReviewConfirmationTests: XCTestCase {
                 XCTAssertEqual(store.reviewInbox.items[0].candidates.count, candidates.count - index - 1)
             }
         }
-        XCTAssertTrue(store.reviewInbox.items.isEmpty)
-        XCTAssertEqual(store.garden.visibleDeadlines.map(\.id), ["ocr-1", "ocr-2", "ocr-3"])
-        XCTAssertEqual(store.garden.queuedCount, 1)
-        store.garden.harvest(id: "ocr-1")
-        XCTAssertEqual(store.garden.visibleDeadlines.map(\.id), ["ocr-2", "ocr-3", "ocr-4"])
-        XCTAssertEqual(store.garden.queuedCount, 0)
+        XCTAssertEqual(store.reviewInbox.items.count, 1, "Category review remains after DDLs")
+        XCTAssertEqual(store.garden.visibleDeadlines.map(\.id), ["ocr-4"])
+        XCTAssertEqual(store.garden.queuedCount, 3)
+        store.garden.harvest(id: "ocr-4")
+        XCTAssertEqual(store.garden.visibleDeadlines.map(\.id), ["ocr-3"])
+        XCTAssertEqual(store.garden.queuedCount, 2)
     }
 
     func testPendingReviewSurvivesRestartAndInvalidInputCannotDiscardIt() async throws {
@@ -89,7 +126,7 @@ final class ShellReviewConfirmationTests: XCTestCase {
         XCTAssertEqual(store.garden.deadlines.count, 1)
         XCTAssertNil(store.garden.deadlines[0].dueTime)
         XCTAssertEqual(store.garden.deadlines[0].title, "手动补充作业")
-        XCTAssertTrue(store.reviewInbox.items.isEmpty)
+        XCTAssertEqual(store.reviewInbox.items.count, 1, "Category review remains actionable")
         XCTAssertEqual(store.vine.totalGrapes, 0)
     }
 
@@ -124,7 +161,7 @@ final class ShellReviewConfirmationTests: XCTestCase {
         let store = makeStore([result(candidates: [clear])], defaults: defaults)
         store.classifyFiles([file("clear.txt")])
         await store.waitUntilIdle()
-        XCTAssertTrue(store.reviewInbox.items.isEmpty)
+        XCTAssertEqual(store.reviewInbox.items.count, 1, "Unknown classification remains actionable")
         XCTAssertEqual(store.garden.visibleDeadlines.map(\.id), ["clear"])
         XCTAssertEqual(store.vine.totalGrapes, 0)
     }

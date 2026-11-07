@@ -21,9 +21,19 @@ final class LiveGardenIntegrationTests: XCTestCase {
         try manager.createDirectory(at: fixtures, withIntermediateDirectories: false)
         defer { try? manager.removeItem(at: fixtures) }
 
+        let calendar = Calendar(identifier: .gregorian)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = calendar
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        let today = calendar.startOfDay(for: Date())
+        let expectedDates = try (7...10).map { offset in
+            formatter.string(from: try XCTUnwrap(calendar.date(byAdding: .day, value: offset, to: today)))
+        }
         let ddlFiles = try (1...4).map { index -> URL in
             let file = fixtures.appendingPathComponent("deadline-\(index).txt")
-            let text = "软件工程实验报告。请于2026年11月\(index + 2)日23:59前提交第\(index)次实验报告。"
+            let text = "课程讲义作业考试。请于\(expectedDates[index - 1]) 23:59前提交第\(index)次实验报告。"
             try text.write(to: file, atomically: true, encoding: .utf8)
             return file
         }
@@ -42,6 +52,8 @@ final class LiveGardenIntegrationTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         let store = ShellStore(client: client, defaults: defaults, arguments: [],
                                pollInterval: 20_000_000, jobTimeout: 15)
+        XCTAssertEqual(store.garden.visibleLimit, 1)
+        store.garden.setVisibleLimit(3)
         store.classifyFiles(files)
         await store.waitUntilIdle()
 
@@ -49,10 +61,10 @@ final class LiveGardenIntegrationTests: XCTestCase {
         XCTAssertEqual(store.garden.deadlines.count, 4, store.status)
         XCTAssertEqual(store.garden.visibleDeadlines.count, 3)
         XCTAssertEqual(store.garden.queuedCount, 1)
-        XCTAssertEqual(store.garden.deadlines.map(\.dueDate), ["2026-11-03", "2026-11-04", "2026-11-05", "2026-11-06"])
+        XCTAssertEqual(store.garden.deadlines.map(\.dueDate), expectedDates)
         XCTAssertEqual(store.garden.deadlines.map(\.dueTime), Array(repeating: "23:59", count: 4))
         XCTAssertEqual(store.vine.count(for: "finance"), 2)
-        XCTAssertEqual(store.vine.totalGrapes, 2, "DDL-bearing files must use the flower route")
+        XCTAssertEqual(store.vine.totalGrapes, 6, "DDL-bearing files must also count their classification")
         let firstFlower = try XCTUnwrap(store.garden.visibleDeadlines.first)
         let originallyQueued = try XCTUnwrap(store.garden.deadlines.last)
         XCTAssertFalse(firstFlower.title.isEmpty)
@@ -67,6 +79,7 @@ final class LiveGardenIntegrationTests: XCTestCase {
 
         let restoredStore = ShellStore(client: client, defaults: try XCTUnwrap(UserDefaults(suiteName: suite)),
                                        arguments: [], pollInterval: 20_000_000, jobTimeout: 15)
+        XCTAssertEqual(restoredStore.garden.visibleLimit, 3)
         XCTAssertEqual(restoredStore.garden.deadlines, store.garden.deadlines)
         XCTAssertEqual(restoredStore.vine.count(for: "finance"), 2)
         restoredStore.classifyFiles(files)
@@ -79,7 +92,7 @@ final class LiveGardenIntegrationTests: XCTestCase {
         XCTAssertEqual(restoredStore.garden.visibleDeadlines.count, 3)
         XCTAssertEqual(restoredStore.garden.queuedCount, 0)
         XCTAssertEqual(restoredStore.vine.count(for: "finance"), 2)
-        XCTAssertEqual(restoredStore.vine.totalGrapes, 2)
+        XCTAssertEqual(restoredStore.vine.totalGrapes, 6)
         for (file, original) in zip(files, originals) {
             XCTAssertEqual(try Data(contentsOf: file), original, file.lastPathComponent)
         }

@@ -81,7 +81,15 @@ final class LocalEngineRuntimeTests: XCTestCase {
         try FileManager.default.createDirectory(at: input, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let file = input.appendingPathComponent("课程截止通知.txt")
-        let original = Data("课程名称：软件工程\n请于2026年11月3日23:59前提交实验报告".utf8)
+        let calendar = Calendar(identifier: .gregorian)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = calendar
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        let dueDate = formatter.string(from: try XCTUnwrap(
+            calendar.date(byAdding: .day, value: 7, to: calendar.startOfDay(for: Date()))))
+        let original = Data("课程名称：软件工程\n请于\(dueDate) 23:59前提交实验报告".utf8)
         try original.write(to: file)
         let firstRuntime = makeRuntime(core: core, allowedRoot: input, directory: directory, logName: "first.log")
         let independentRuntime = makeRuntime(core: core, allowedRoot: input, directory: directory, logName: "independent.log")
@@ -104,7 +112,10 @@ final class LocalEngineRuntimeTests: XCTestCase {
         let completed = try await finishedJob(client: client, id: accepted.jobID)
         XCTAssertEqual(completed.status, "completed")
         XCTAssertEqual(completed.result?.deadlines.count, 1)
-        XCTAssertEqual(completed.result?.deadlines.first?.project, "软件工程")
+        XCTAssertEqual(completed.result?.categoryID, "learning")
+        XCTAssertEqual(completed.result?.deadlines.first?.project, completed.result?.categoryLabel)
+        XCTAssertEqual(completed.result?.deadlines.first?.dueDate, dueDate)
+        XCTAssertEqual(completed.result?.deadlines.first?.requiresConfirmation, false)
         XCTAssertEqual(completed.result?.deadlines.first?.dueTime, "23:59")
         XCTAssertEqual(try Data(contentsOf: file), original)
 

@@ -44,21 +44,4 @@ public enum CompactGardenLayout {
         return min(0.60, 288.0 / Double(total - 1) / 70.0)
     }
 
-    /// Apply the appearance scale without moving the initial release position or
-    /// losing the original shoulder contact after the falling bunch is caught.
-    public static func grapeCenter(for state: TheftSceneState, elapsed: TimeInterval,
-                                   reducedMotion: Bool, visualScale: Double) -> CorePoint {
-        let scale = visualScale.isFinite ? max(0, visualScale) : 0.60
-        let time = elapsed.isFinite ? max(0, elapsed) : 0
-        let blend: Double
-        if reducedMotion {
-            blend = time >= 1.25 ? 1 : 0
-        } else {
-            let progress = min(1, max(0, (time - 0.9) / 1.2))
-            blend = progress * progress * (3 - 2 * progress)
-        }
-        let contact = state.grapeBackContact
-        return CorePoint(x: state.grapeCenter.x + (contact.x - state.grapeCenter.x) * (1 - scale) * blend,
-                         y: state.grapeCenter.y + (contact.y - state.grapeCenter.y) * (1 - scale) * blend)
-    }
 }

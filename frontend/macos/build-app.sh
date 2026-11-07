@@ -13,7 +13,8 @@ if pgrep -x FilePetShell >/dev/null; then
 fi
 swift build -c release
 FILEPET_SHELL_BINARY_DIR=$(swift build -c release --show-bin-path)
-FILEPET_SHELL_APP="$FILEPET_SHELL_ROOT/build/FilePetShell.app"
+FILEPET_APP_BUNDLE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' Info.plist)
+FILEPET_SHELL_APP="$FILEPET_SHELL_ROOT/build/$FILEPET_APP_BUNDLE_NAME.app"
 mkdir -p "$FILEPET_SHELL_APP/Contents/MacOS" "$FILEPET_SHELL_APP/Contents/Resources"
 cp "$FILEPET_SHELL_BINARY_DIR/FilePetShell" "$FILEPET_SHELL_APP/Contents/MacOS/FilePetShell"
 ditto "$FILEPET_SHELL_BINARY_DIR/FilePetShell_FilePetShell.bundle" \
@@ -22,6 +23,16 @@ cp Info.plist "$FILEPET_SHELL_APP/Contents/Info.plist"
 # Record this Mac's installed runtime location without hard-coding it in source.
 /usr/bin/plutil -insert FilePetEngineRoot -string "$FILEPET_BUILD_ENGINE_ROOT" \
   "$FILEPET_SHELL_APP/Contents/Info.plist"
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  FILEPET_BUILD_COMMIT=$(git rev-parse HEAD)
+  FILEPET_BUILD_BRANCH=$(git branch --show-current)
+  /usr/bin/plutil -insert FilePetBuildCommit -string "$FILEPET_BUILD_COMMIT" \
+    "$FILEPET_SHELL_APP/Contents/Info.plist"
+  /usr/bin/plutil -insert FilePetBuildBranch -string "$FILEPET_BUILD_BRANCH" \
+    "$FILEPET_SHELL_APP/Contents/Info.plist"
+  /usr/bin/plutil -insert FilePetBuildSourceRoot -string "$FILEPET_SHELL_ROOT" \
+    "$FILEPET_SHELL_APP/Contents/Info.plist"
+fi
 if [[ ! -d "$FILEPET_BUILD_ENGINE_ROOT/backend/filepet" || ! -x "$FILEPET_BUILD_ENGINE_ROOT/.venv/bin/python" ]]; then
   print -u2 "提示：本机分类环境尚未就绪，App 仍可构建；自动分类需要 $FILEPET_BUILD_ENGINE_ROOT 中的核心与 Python 环境。"
 fi

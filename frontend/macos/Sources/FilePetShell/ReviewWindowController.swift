@@ -84,7 +84,7 @@ private struct PendingReviewView: View {
                 List(selection: $selectedReviewID) {
                     ForEach(inbox.items) { review in
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(review.fileName).lineLimit(2)
+                            Text(FileDisplayName.label(review.fileName)).lineLimit(2)
                             Text(review.candidates.isEmpty
                                  ? "补充 DDL 或指定分类"
                                  : "\(review.candidates.count) 项 DDL 待核对")
@@ -125,7 +125,7 @@ private struct PendingReviewView: View {
                 VStack(alignment: .leading, spacing: 15) {
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 5) {
-                            Text(review.fileName).font(.title3).fontWeight(.semibold)
+                            Text(FileDisplayName.label(review.fileName)).font(.title3).fontWeight(.semibold)
                             Text(review.reason).font(.caption).foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -213,8 +213,21 @@ private struct PendingReviewView: View {
                 labelledField("截止日期", placeholder: "YYYY-MM-DD", text: $dueDate, id: "review-date")
                 labelledField("截止时间（可选）", placeholder: "HH:mm，可留空", text: $dueTime, id: "review-time")
             }
-            if selectedCandidate?.yearInferred == true {
+            if let candidate = selectedCandidate, let reason = candidate.reliabilityReason {
+                HStack(spacing: 6) {
+                    Image(systemName: candidate.reliability == "low"
+                          ? "exclamationmark.circle" : "info.circle")
+                    Text(reason)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            } else if selectedCandidate?.yearInferred == true {
                 Text("年份由系统推定，请按原文核对。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if selectedCandidate?.titleInferred == true {
+                Text("任务名称根据页面类型概括，请核对具体作业名称。")
                     .font(.caption).foregroundStyle(.secondary)
             }
             if let evidence = selectedCandidate?.evidence, !evidence.isEmpty {
@@ -299,9 +312,9 @@ private struct PendingReviewView: View {
             dueDate = candidate.dueDate
             dueTime = candidate.dueTime ?? ""
         } else if let review = selectedReview {
-            let name = URL(fileURLWithPath: review.fileName).deletingPathExtension().lastPathComponent
-            title = name
-            project = name
+            let name = FileDisplayName.label(review.fileName)
+            title = name == "截图" || name == "图片" ? "" : URL(fileURLWithPath: name).deletingPathExtension().lastPathComponent
+            project = ""
             dueDate = ""
             dueTime = ""
         }

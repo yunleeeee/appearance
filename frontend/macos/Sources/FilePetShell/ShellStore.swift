@@ -13,7 +13,8 @@ struct ShellFileResult: Identifiable, Equatable {
 }
 
 /// UI orchestration only: the service owns every classification decision.
-/// This adapter never extracts file contents or copies/moves the original.
+/// This adapter never extracts file contents; optional local archiving
+/// moves only already classified originals after verified destination writes.
 @MainActor
 final class ShellStore: ObservableObject {
     @Published private(set) var status = "把文件投给葡萄藤，或先预览动画"
@@ -25,10 +26,52 @@ final class ShellStore: ObservableObject {
     let vine: VineModel
     let garden: DeadlineGarden
     let reviewInbox: FileReviewInbox
+    let archive: ClassificationArchive
     var onShowPendingReviews: (() -> Void)?
     private let defaults: UserDefaults
     private var classifiedPaths: Set<String>
     private let pathsKey = "filepet.shell.inventory.paths.v1"
+    private let fingerprintsKey = "filepet.shell.inventory.ocrFingerprints.v1"
+    private let semanticGrapesKey = "filepet.shell.inventory.semanticGrapes.v1"
+    private let automaticImageDeadlineKey = "filepet.shell.deadlines.autoAcceptImageOCR.v1"
+
+    /// Automation is opt-out. Strict mode only changes future feeds; it never
+    /// deletes an already accepted flower or alters a user's completion record.
+    var autoAcceptImageDeadlines: Bool {
+        defaults.object(forKey: automaticImageDeadlineKey) as? Bool ?? true
+    }
+
+    func setAutoAcceptImageDeadlines(_ enabled: Bool) {
+        defaults.set(enabled, forKey: automaticImageDeadlineKey)
+    }
+
+    private func needsDeadlineReview(_ candidate: EngineDeadline, result: EngineClassificationResult) -> Bool {
+        if candidate.requiresConfirmation { return true }
+        let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "webp", "bmp", "tif", "tiff"]
+        let isImage = imageExtensions.contains(URL(fileURLWithPath: result.path).pathExtension.lowercased())
+        return isImage && !autoAcceptImageDeadlines
+    }
+    private var imageFingerprints: Set<String> = []
+    /// Category-scoped task identity prevents an equivalent *crop* of the
+    /// same screenshot from growing another grape. Content fingerprint alone
+    /// only catches byte-different images with exactly matching OCR text.
+    private var semanticGrapes: Set<String> = []
+
+    private func grapeTokens(category: String, deadlines: [EngineDeadline]) -> Set<String> {
+        Set(deadlines.compactMap { deadline in
+            guard let semanticKey = deadline.semanticKey, !semanticKey.isEmpty else { return nil }
+            return category + ":" + semanticKey
+        })
+    }
+
+    private func rememberGrapeTokens(_ tokens: Set<String>) {
+        guard !tokens.isEmpty else { return }
+        let previousCount = semanticGrapes.count
+        semanticGrapes.formUnion(tokens)
+        if semanticGrapes.count != previousCount {
+            defaults.set(semanticGrapes.sorted(), forKey: semanticGrapesKey)
+        }
+    }
     private var client: (any EngineServing)?
     private let runtime: (any EngineRuntimeManaging)?
     private let usesInjectedClient: Bool
@@ -53,8 +96,11 @@ final class ShellStore: ObservableObject {
         vine = VineModel(defaults: defaults)
         garden = DeadlineGarden(defaults: defaults)
         reviewInbox = FileReviewInbox(defaults: defaults)
+        archive = ClassificationArchive(defaults: defaults)
         self.defaults = defaults
         classifiedPaths = Set(defaults.stringArray(forKey: "filepet.shell.inventory.paths.v1") ?? [])
+        imageFingerprints = Set(defaults.stringArray(forKey: "filepet.shell.inventory.ocrFingerprints.v1") ?? [])
+        semanticGrapes = Set(defaults.stringArray(forKey: semanticGrapesKey) ?? [])
         categoryLabels = defaults.dictionary(forKey: "filepet.shell.inventory.labels.v1") as? [String: String] ?? [:]
         vine.setCategoryLabels(categoryLabels)
         self.pollInterval = pollInterval
@@ -203,51 +249,139 @@ final class ShellStore: ObservableObject {
             for (index, url) in files.enumerated() {
                 try Task.checkCancellation()
                 guard runID == batchID else { return }
-                status = "正在分类（\(index + 1)/\(files.count)）\(url.lastPathComponent)"
+                status = "正在分类（\(index + 1)/\(files.count)）\(FileDisplayName.label(url.lastPathComponent))"
                 let scope = url.startAccessingSecurityScopedResource()
                 defer { if scope { url.stopAccessingSecurityScopedResource() } }
                 do {
                     let job = try await finishedJob(path: url.path)
                     try Task.checkCancellation()
                     guard runID == batchID else { return }
-                    if ["completed", "needs_review"].contains(job.status), let result = job.result,
-                       !result.deadlines.isEmpty {
-                        let knownIDs = Set(garden.deadlines.map(\.id))
-                        let pending = result.deadlines.filter { $0.requiresConfirmation && !knownIDs.contains($0.id) }
-                        let added = garden.feed(result.deadlines.filter { !$0.requiresConfirmation })
-                        if !pending.isEmpty {
-                            reviewInbox.enqueue(result: result, candidates: pending)
-                            let detail = "识别到 \(pending.count) 个需核对的 DDL；请在“待确认事项”中确认并生成花朵"
-                            results.append(ShellFileResult(fileName: url.lastPathComponent, outcome: .needsReview,
-                                categoryLabel: nil, detail: detail,
-                                reviewID: URL(fileURLWithPath: result.path).standardizedFileURL.path))
-                        } else {
-                            reviewInbox.remove(id: URL(fileURLWithPath: result.path).standardizedFileURL.path)
-                            let detail = added > 0 ? "新增 \(added) 个 DDL；当前 \(garden.visibleDeadlines.count) 朵花，\(garden.queuedCount) 个排队" : "DDL 已投喂或已收获，无需重复添加"
-                            results.append(ShellFileResult(fileName: url.lastPathComponent, outcome: .deadline,
-                                                           categoryLabel: nil, detail: detail))
-                        }
-                    } else if job.status == "completed", let result = job.result,
-                       result.status == "classified", let category = result.categoryID, !category.isEmpty {
-                        let label = result.categoryLabel ?? categoryLabels[category] ?? category
-                        categoryLabels[category] = label
-                        vine.setCategoryLabels(categoryLabels)
-                        defaults.set(categoryLabels, forKey: "filepet.shell.inventory.labels.v1")
+                    if ["completed", "needs_review"].contains(job.status), let result = job.result {
+                        // Classification and DDL candidates are independent outcomes.
                         let identity = URL(fileURLWithPath: result.path).standardizedFileURL.path
-                        let isNew = classifiedPaths.insert(identity).inserted
-                        if isNew {
-                            vine.recordSuccess(category: category)
-                            defaults.set(classifiedPaths.sorted(), forKey: pathsKey)
+                        var label: String?
+                        var newGrape = false
+                        var duplicateTaskCrop = false
+                        var archiveSummary = ""
+                        var relocatedPath: String?
+                        let fingerprint = result.contentFingerprint.flatMap { $0.isEmpty ? nil : $0 }
+                        let duplicateContent = fingerprint.map { imageFingerprints.contains($0) } ?? false
+                        if result.status == "classified", let category = result.categoryID, !category.isEmpty {
+                            let resolved = result.categoryLabel ?? categoryLabels[category] ?? category
+                            label = resolved
+                            categoryLabels[category] = resolved
+                            vine.setCategoryLabels(categoryLabels)
+                            defaults.set(categoryLabels, forKey: "filepet.shell.inventory.labels.v1")
+                            let semanticTokens = grapeTokens(category: category, deadlines: result.deadlines)
+                            duplicateTaskCrop = fingerprint != nil &&
+                                !semanticTokens.isEmpty &&
+                                semanticTokens.isSubset(of: semanticGrapes)
+                            let newPath = classifiedPaths.insert(identity).inserted
+                            if newPath && !duplicateContent && !duplicateTaskCrop {
+                                vine.recordSuccess(category: category)
+                                newGrape = true
+                            }
+                            if newPath { defaults.set(classifiedPaths.sorted(), forKey: pathsKey) }
+                            // Remember the semantic identity whether this was a new
+                            // grape or an exact duplicate: existing fingerprint-only
+                            // histories get upgraded without changing their counts.
+                            if fingerprint != nil { rememberGrapeTokens(semanticTokens) }
+                            do {
+                                let isGeneratedScreenshot =
+                                    FileDisplayName.label(url.lastPathComponent) != url.lastPathComponent
+                                let title = result.deadlines.first {
+                                    !needsDeadlineReview($0, result: result)
+                                        && $0.titleInferred != true
+                                }?.title
+                                switch try await archive.copyClassifiedFile(
+                                    source: url, categoryID: category, categoryLabel: resolved,
+                                    preferredName: isGeneratedScreenshot ? title : nil) {
+                                case .notConfigured:
+                                    break // User has not opted in to a destination.
+                                case .moved(let path):
+                                    relocatedPath = path
+                                    archiveSummary = "；已移动至" + URL(fileURLWithPath: path).deletingLastPathComponent().lastPathComponent
+                                case .alreadyStored(let path):
+                                    relocatedPath = path
+                                    archiveSummary = "；文件已归档"
+                                }
+                            } catch {
+                                // Classification remains valid even when moving fails.
+                                // The original is kept on any failed verification.
+                                archiveSummary = "；归档失败：" + error.localizedDescription
+                            }
                         }
-                        results.append(ShellFileResult(fileName: url.lastPathComponent, outcome: .classified,
-                                                       categoryLabel: label, detail: isNew ? result.reason : "这个文件已分类，葡萄数量保持不变"))
-                    } else if job.status == "needs_review" {
-                        if let result = job.result { reviewInbox.enqueue(result: result) }
-                        results.append(ShellFileResult(fileName: url.lastPathComponent, outcome: .needsReview,
-                            categoryLabel: nil, detail: job.result?.reason ?? "需要你确认分类",
-                            reviewID: job.result.map { URL(fileURLWithPath: $0.path).standardizedFileURL.path }))
+                        let accepted = result.deadlines.filter {
+                            !needsDeadlineReview($0, result: result)
+                        }.map { candidate -> EngineDeadline in
+                            var item = candidate
+                            if let relocatedPath { item.sourcePath = relocatedPath }
+                            return item
+                        }
+                        let added = garden.feed(accepted)
+                        // Users upgrading from mandatory-OCR-review mode should not
+                        // have the same task in both the flower garden and inbox.
+                        if garden.persistenceError == nil {
+                            reviewInbox.removeAutomaticallyAccepted(accepted)
+                        }
+                        let known = Set(garden.deadlines.map(\.id))
+                        let knownSemanticKeys = Set(garden.deadlines.compactMap(\.semanticKey))
+                        let pendingKeys = reviewInbox.pendingSemanticKeys
+                        let toReview = result.deadlines.filter { candidate in
+                            guard needsDeadlineReview(candidate, result: result),
+                                  !known.contains(candidate.id) else { return false }
+                            if let key = candidate.semanticKey {
+                                return !knownSemanticKeys.contains(key) && !pendingKeys.contains(key)
+                            }
+                            return true
+                        }.map { candidate -> EngineDeadline in
+                            var item = candidate
+                            if let relocatedPath { item.sourcePath = relocatedPath }
+                            return item
+                        }
+                        if let fingerprint, label != nil {
+                            if imageFingerprints.insert(fingerprint).inserted {
+                                defaults.set(imageFingerprints.sorted(), forKey: fingerprintsKey)
+                            }
+                        }
+                        let categoryPending = label == nil
+                        let matchingPending = fingerprint.flatMap { digest in
+                            reviewInbox.items.first {
+                                $0.id != identity && $0.contentFingerprint == digest
+                            }
+                        }
+                        if (categoryPending || !toReview.isEmpty) && matchingPending == nil {
+                            reviewInbox.enqueue(result: result, candidates: toReview,
+                                                needsCategoryReview: categoryPending)
+                        } else if reviewInbox.items.first(where: { $0.id == identity }) == nil {
+                            // A re-feed must not discard an existing unconfirmed OCR candidate.
+                            reviewInbox.remove(id: identity)
+                        }
+                        if let relocatedPath, relocatedPath != identity {
+                            classifiedPaths.insert(relocatedPath)
+                            defaults.set(classifiedPaths.sorted(), forKey: pathsKey)
+                            garden.relinkSource(from: identity, to: relocatedPath)
+                            reviewInbox.relinkSource(from: identity, to: relocatedPath)
+                        }
+                        let outcome: ShellFileResult.Outcome
+                        if categoryPending || !toReview.isEmpty { outcome = .needsReview }
+                        else if result.deadlines.isEmpty { outcome = .classified }
+                        else { outcome = .deadline }
+                        let categorySummary = label == nil
+                            ? (matchingPending == nil ? "分类待确认" : "相同截图已在待确认中") :
+                            (newGrape ? "已新增分类葡萄" :
+                                (duplicateContent ? "相同截图已处理" :
+                                 duplicateTaskCrop ? "相同任务已处理" : "分类葡萄已计数"))
+                        let deadlineSummary = !toReview.isEmpty
+                            ? "\(toReview.count) 条 DDL 待核对"
+                            : (result.deadlines.isEmpty ? "无 DDL" : "新增 \(added) 朵花")
+                        results.append(ShellFileResult(
+                            fileName: FileDisplayName.label(url.lastPathComponent), outcome: outcome,
+                            categoryLabel: label, detail: "\(categorySummary)；\(deadlineSummary)\(archiveSummary)",
+                            reviewID: (categoryPending || !toReview.isEmpty)
+                                ? (matchingPending?.id ?? identity) : nil))
                     } else {
-                        results.append(ShellFileResult(fileName: url.lastPathComponent, outcome: .failed,
+                        results.append(ShellFileResult(fileName: FileDisplayName.label(url.lastPathComponent), outcome: .failed,
                                                        categoryLabel: nil, detail: job.error?.detail ?? "分类引擎未返回有效结果"))
                     }
                 } catch is CancellationError { throw CancellationError() }
@@ -257,13 +391,16 @@ final class ShellStore: ObservableObject {
                                                    categoryLabel: nil, detail: friendlyError(error)))
                 }
             }
-            let confirmed = results.filter { $0.outcome == .classified }.count
+            let confirmed = results.filter { $0.categoryLabel != nil }.count
             let review = results.filter { $0.outcome == .needsReview }.count
             let failed = results.filter { $0.outcome == .failed }.count
-            let deadlineFiles = results.filter { $0.outcome == .deadline }.count
+            let deadlineFiles = results.filter { $0.outcome == .deadline || $0.detail.contains("DDL 待核对") }.count
             status = "分类完成：\(confirmed) 个已识别，\(review) 个待确认，\(failed) 个失败"
             if deadlineFiles > 0 { status += "；\(deadlineFiles) 份 DDL，\(garden.visibleDeadlines.count) 朵花，\(garden.queuedCount) 个排队" }
-            if review > 0, !reviewInbox.items.isEmpty { onShowPendingReviews?() }
+            // Quiet-by-default inbox: a weak classification or a tentative OCR
+            // deadline must not interrupt ordinary file feeding with a modal.
+            // The menu's pending-review count remains available on demand.
+            // Never auto-schedule an unconfirmed/ambiguous deadline.
         } catch is CancellationError {
             if runID == batchID { status = "已停止等待分类结果" }
         } catch {
@@ -274,7 +411,7 @@ final class ShellStore: ObservableObject {
             }
             connectionStatus = "分类引擎：未连接"
             status = friendlyError(error)
-            results = files.map { ShellFileResult(fileName: $0.lastPathComponent, outcome: .failed,
+            results = files.map { ShellFileResult(fileName: FileDisplayName.label($0.lastPathComponent), outcome: .failed,
                                                   categoryLabel: nil, detail: status) }
         }
     }
@@ -294,7 +431,7 @@ final class ShellStore: ObservableObject {
         let id = candidate?.id ?? DeadlineInput.manualID(path: review.path, title: title, dueDate: date, dueTime: optionalTime)
         let confirmed = EngineDeadline(id: id, title: title, project: project, dueDate: date,
             dueTime: optionalTime, yearInferred: false, evidence: candidate?.evidence ?? "用户补充：" + title,
-            signal: "user_confirmed")
+            signal: "user_confirmed", semanticKey: candidate?.semanticKey)
         garden.feed([confirmed])
         if let error = garden.persistenceError { return error }
         reviewInbox.resolveCandidate(reviewID: reviewID, candidateID: candidateID)
@@ -308,13 +445,48 @@ final class ShellStore: ObservableObject {
         guard let review = reviewInbox.items.first(where: { $0.id == reviewID }) else { return "这项待确认记录已处理。" }
         guard let label = categoryLabels[categoryID], !label.isEmpty else { return "请选择核心提供的分类。" }
         if classifiedPaths.insert(review.path).inserted {
-            vine.beginReceiving()
-            vine.recordSuccess(category: categoryID)
-            vine.scheduleSleep()
+            let duplicateContent = review.contentFingerprint.map { imageFingerprints.contains($0) } ?? false
+            let semanticTokens = grapeTokens(category: categoryID, deadlines: review.candidates)
+            let duplicateTaskCrop = review.contentFingerprint != nil &&
+                !semanticTokens.isEmpty && semanticTokens.isSubset(of: semanticGrapes)
+            if !duplicateContent && !duplicateTaskCrop {
+                vine.beginReceiving()
+                vine.recordSuccess(category: categoryID)
+                vine.scheduleSleep()
+            }
+            if review.contentFingerprint != nil { rememberGrapeTokens(semanticTokens) }
             defaults.set(classifiedPaths.sorted(), forKey: pathsKey)
+            if let digest = review.contentFingerprint, imageFingerprints.insert(digest).inserted {
+                defaults.set(imageFingerprints.sorted(), forKey: fingerprintsKey)
+            }
         }
-        reviewInbox.remove(id: reviewID)
-        status = "已确认为“\(label)”，葡萄计数已更新"
+        reviewInbox.resolveCategory(reviewID: reviewID)
+        status = "已确认为“\(label)”，葡萄记录已保存"
+        if archive.destination != nil {
+            // A later manual category confirmation should also archive the
+            // file. The user-selected folder is opt-in and the copy stays off
+            // the main thread; a missing original only reports a copy error.
+            let source = URL(fileURLWithPath: review.path)
+            Task { [weak self] in
+                guard let self else { return }
+                do {
+                    let receipt = try await self.archive.copyClassifiedFile(
+                        source: source, categoryID: categoryID, categoryLabel: label)
+                    switch receipt {
+                    case .moved(let path), .alreadyStored(let path):
+                        self.garden.relinkSource(from: review.path, to: path)
+                        self.reviewInbox.relinkSource(from: review.path, to: path)
+                        self.classifiedPaths.insert(path)
+                        self.defaults.set(self.classifiedPaths.sorted(), forKey: self.pathsKey)
+                        self.status = "已移动分类文件至“\(label)”"
+                    case .notConfigured:
+                        break
+                    }
+                } catch {
+                    self.status = "已确认分类；归档失败（原件未改动）：" + error.localizedDescription
+                }
+            }
+        }
         updateReviewedResult(review, outcome: .classified, detail: status, categoryLabel: label)
         return nil
     }

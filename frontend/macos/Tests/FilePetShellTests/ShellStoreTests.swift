@@ -130,7 +130,7 @@ final class ShellStoreTests: XCTestCase {
         await store.waitUntilIdle()
 
         XCTAssertEqual(store.vine.totalGrapes, 0)
-        XCTAssertEqual(store.results.map(\.outcome), [.failed, .failed])
+        XCTAssertEqual(store.results.map(\.outcome), [.needsReview, .failed])
     }
 
     private func makeStore(_ engine: ScriptedShellEngine, timeout: TimeInterval = 1) -> (ShellStore, String) {

@@ -76,12 +76,48 @@ final class EngineClientTests: XCTestCase {
             XCTAssertEqual(result.deadlines, [
                 EngineDeadline(id: "stable-first", title: "提交实验报告", project: "软件工程",
                                dueDate: "2026-11-03", dueTime: "23:59", yearInferred: false,
-                               evidence: "请于2026年11月3日23:59前提交实验报告", signal: "date_before_action"),
+                               evidence: "请于2026年11月3日23:59前提交实验报告", signal: "date_before_action", status: "needs_confirmation"),
                 EngineDeadline(id: "stable-second", title: "上传演示材料", project: "软件工程",
                                dueDate: "2026-11-05", dueTime: nil, yearInferred: true,
-                               evidence: "演示材料截止：11月5日", signal: "explicit_deadline"),
+                               evidence: "演示材料截止：11月5日", signal: "explicit_deadline", status: "needs_confirmation"),
             ])
         }
+    }
+
+    func testNewOCRSemanticFieldsDecodeWithoutBreakingOldPayloads() throws {
+        let payload = """
+        {
+          "path":"/tmp/已粘贴 2026-11-01 下午8.14.18.png",
+          "file_name":"已粘贴 2026-11-01 下午8.14.18.png",
+          "status":"classified","category_id":"learning",
+          "category_label":"课程与学习","confidence":0.65,
+          "matched_keywords":["作业"],"reason":"内容匹配",
+          "extraction_chars":85,
+          "content_fingerprint":"0123contenthash",
+          "deadlines":[{
+            "id":"old-path-id","title":"11月8日截止的作业",
+            "project":"课程与学习","due_date":"2026-11-08",
+            "due_time":"23:59","year_inferred":false,
+            "evidence":"截止日期：2026年11月8日23:59",
+            "confirmation_required":true,
+            "source_path":"/tmp/已粘贴 2026-11-01 下午8.14.18.png",
+            "semantic_key":"task-stable-across-screenshots",
+            "title_inferred":true,"reliability":"review",
+            "reliability_reason":"图片 OCR 需核对文字和截止时间"
+          }]
+        }
+        """
+        let result = try JSONDecoder().decode(EngineClassificationResult.self,
+                                              from: Data(payload.utf8))
+        XCTAssertEqual(result.contentFingerprint, "0123contenthash")
+        let deadline = try XCTUnwrap(result.deadlines.first)
+        XCTAssertTrue(deadline.requiresConfirmation)
+        XCTAssertEqual(deadline.semanticKey, "task-stable-across-screenshots")
+        XCTAssertEqual(deadline.titleInferred, true)
+        XCTAssertEqual(deadline.reliability, "review")
+        XCTAssertEqual(deadline.reliabilityReason, "图片 OCR 需核对文字和截止时间")
+        XCTAssertEqual(FileDisplayName.label(result.fileName), "截图")
+        XCTAssertTrue(result.path.contains("已粘贴"))
     }
 
     func testFailedJobDecodesRootAuthorizationFailure() async throws {

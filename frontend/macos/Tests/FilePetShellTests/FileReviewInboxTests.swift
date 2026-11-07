@@ -22,8 +22,35 @@ final class FileReviewInboxTests: XCTestCase {
         XCTAssertEqual(restored.items[0].candidates.map(\.id), ["second"])
         XCTAssertEqual(FileReviewInbox(defaults: defaults).items, restored.items)
         restored.resolveCandidate(reviewID: reviewID, candidateID: "second")
+        XCTAssertEqual(restored.items.count, 1, "Unclassified file still needs category confirmation")
+        restored.resolveCategory(reviewID: reviewID)
         XCTAssertTrue(restored.items.isEmpty)
         XCTAssertTrue(FileReviewInbox(defaults: defaults).items.isEmpty)
+    }
+
+    func testAutomaticAcceptanceClearsOnlyMatchingCandidateAndKeepsCategoryReview() {
+        let (defaults, suite) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let inbox = FileReviewInbox(defaults: defaults)
+        var one = candidate("one")
+        var two = candidate("two")
+        one.semanticKey = "same-across-screenshots"
+        two.semanticKey = "another-task"
+        inbox.enqueue(result: pendingResult(path: "/tmp/ocr.png", candidates: [one, two]),
+                      needsCategoryReview: true)
+        var accepted = candidate("new-source-id")
+        accepted.semanticKey = "same-across-screenshots"
+        inbox.removeAutomaticallyAccepted([accepted])
+        XCTAssertEqual(inbox.items.count, 1)
+        XCTAssertEqual(inbox.items[0].candidates.map(\.id), ["two"],
+                       "A different task must still require review")
+        XCTAssertTrue(inbox.items[0].needsCategoryReview == true)
+        inbox.removeAutomaticallyAccepted([two])
+        XCTAssertEqual(inbox.items.count, 1,
+                       "Unclassified source must remain available for category review")
+        XCTAssertTrue(inbox.items[0].candidates.isEmpty)
+        inbox.resolveCategory(reviewID: inbox.items[0].id)
+        XCTAssertTrue(inbox.items.isEmpty)
     }
 
     func testUnknownFileCanBeRemovedWithoutInventingADate() {

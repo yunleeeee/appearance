@@ -6,12 +6,10 @@ import Foundation
 final class VineModel: ObservableObject {
     static let grapesPerBranchLimit = VineEngine.grapesPerBranchLimit
     static let fullThreshold = VineEngine.fullThreshold
-    static let theftDuration = VineEngine.theftDuration
 
     @Published private(set) var phase: VinePhase = .hidden
     @Published private(set) var branches: [VineBranch] = []
     @Published private(set) var latestGrowth: VineGrowth?
-    @Published private(set) var activeTheft: VineTheft?
     @Published private(set) var isVisible = false
     @Published private(set) var isFull = false
     @Published private(set) var persistenceError: String?
@@ -42,9 +40,6 @@ final class VineModel: ObservableObject {
     func harvestedGrapes(for category: String) -> Int { engine.harvestedGrapes(for: category) }
     func recordSuccess(category: String) { update { $0.recordSuccess(category: category) } }
     func recordSuccesses(categories: [String]) { update { $0.recordSuccesses(categories: categories) } }
-    func previewTheft() { update { $0.previewTheft() } }
-    func setTheftPresentationEnabled(_ enabled: Bool) { update { $0.setTheftPresentationEnabled(enabled) } }
-    func completeTheft(id: UUID) { update { $0.completeTheft(id: id) } }
     func preview() { update { $0.preview() } }
     func wake() { update { $0.wake() } }
     func calmDown(after delay: TimeInterval = 0.25) { update { $0.calmDown(after: delay) } }
@@ -63,7 +58,6 @@ final class VineModel: ObservableObject {
         if phase != state.phase { phase = state.phase }
         if latestGrowth != state.latestGrowth { latestGrowth = state.latestGrowth }
         if branches != state.branches { branches = state.branches }
-        if activeTheft != state.activeTheft { activeTheft = state.activeTheft }
         if isVisible != state.isVisible { isVisible = state.isVisible }
         if isFull != state.isFull { isFull = state.isFull }
         if persistenceError != state.persistenceError { persistenceError = state.persistenceError }

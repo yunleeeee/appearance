@@ -4,11 +4,13 @@ import Foundation
 
 struct PendingFileReview: Identifiable, Codable, Equatable {
     let id: String
-    let path: String
+    var path: String
     let fileName: String
     let reason: String
     var candidates: [EngineDeadline]
     let createdAt: Date
+    var needsCategoryReview: Bool? = nil
+    var contentFingerprint: String? = nil
 }
 
 @MainActor
@@ -25,28 +27,97 @@ final class FileReviewInbox: ObservableObject {
         catch { persistenceError = "读取待确认事项失败：\(error.localizedDescription)" }
     }
 
-    func enqueue(result: EngineClassificationResult, candidates: [EngineDeadline]? = nil) {
+    var pendingSemanticKeys: Set<String> {
+        Set(items.flatMap { $0.candidates.compactMap(\.semanticKey) })
+    }
+
+    func enqueue(result: EngineClassificationResult, candidates: [EngineDeadline]? = nil, needsCategoryReview: Bool? = nil) {
         let path = URL(fileURLWithPath: result.path).standardizedFileURL.path
         let previous = items.first { $0.id == path }
-        let proposed = candidates ?? result.deadlines
+        let incoming = candidates ?? result.deadlines
+        // Refeeding the same source must never erase earlier unresolved OCR
+        // candidates when another DDL becomes recognizable on a later pass.
+        var known = Set<String>()
+        let proposed = ((previous?.candidates ?? []) + incoming).filter { candidate in
+            let key = candidate.semanticKey ?? candidate.id
+            return known.insert(key).inserted
+        }
         let reason = proposed.contains(where: \.requiresConfirmation)
             ? "图片中的截止日期需要核对，请确认内容、时间和项目。" : result.reason
         let review = PendingFileReview(id: path, path: path, fileName: result.fileName,
             reason: reason, candidates: proposed,
-            createdAt: previous?.createdAt ?? Date())
+            createdAt: previous?.createdAt ?? Date(),
+            needsCategoryReview: needsCategoryReview ?? (result.status != "classified"),
+            contentFingerprint: result.contentFingerprint ?? previous?.contentFingerprint)
         var updated = items
         if let index = updated.firstIndex(where: { $0.id == path }) { updated[index] = review }
         else { updated.append(review) }
         save(updated)
     }
 
+    /// Remove an older OCR review when the same semantic task has now been
+    /// accepted automatically. Keep unrelated candidates and category reviews.
+    /// Never discards the original image or any stored completed garden item.
+    func removeAutomaticallyAccepted(_ accepted: [EngineDeadline]) {
+        guard !accepted.isEmpty else { return }
+        let ids = Set(accepted.map(\.id))
+        let keys = Set(accepted.compactMap(\.semanticKey))
+        var changed = false
+        let updated = items.compactMap { review -> PendingFileReview? in
+            var next = review
+            let count = next.candidates.count
+            next.candidates.removeAll { candidate in
+                ids.contains(candidate.id) ||
+                    (candidate.semanticKey.map { keys.contains($0) } ?? false)
+            }
+            if next.candidates.count != count { changed = true }
+            if next.candidates.isEmpty && next.needsCategoryReview != true {
+                changed = true
+                return nil
+            }
+            return next
+        }
+        if changed { save(updated) }
+    }
+
+    /// Keep pending candidates and their Open Source actions valid when
+    /// their image was safely moved after classification.
+    func relinkSource(from oldPath: String, to newPath: String) {
+        guard oldPath != newPath else { return }
+        var updated = items
+        var changed = false
+        for index in updated.indices where updated[index].path == oldPath {
+            updated[index].path = newPath
+            for candidateIndex in updated[index].candidates.indices {
+                if updated[index].candidates[candidateIndex].sourcePath == oldPath {
+                    updated[index].candidates[candidateIndex].sourcePath = newPath
+                }
+            }
+            changed = true
+        }
+        if changed { save(updated) }
+    }
+
     func remove(id: String) { save(items.filter { $0.id != id }) }
 
     func resolveCandidate(reviewID: String, candidateID: String?) {
         guard let index = items.firstIndex(where: { $0.id == reviewID }) else { return }
-        guard let candidateID else { remove(id: reviewID); return }
+        guard let candidateID else {
+            if items[index].needsCategoryReview != true { remove(id: reviewID) }
+            return
+        }
         var updated = items
         updated[index].candidates.removeAll { $0.id == candidateID }
+        if updated[index].candidates.isEmpty && updated[index].needsCategoryReview != true {
+            updated.remove(at: index)
+        }
+        save(updated)
+    }
+
+    func resolveCategory(reviewID: String) {
+        guard let index = items.firstIndex(where: { $0.id == reviewID }) else { return }
+        var updated = items
+        updated[index].needsCategoryReview = false
         if updated[index].candidates.isEmpty { updated.remove(at: index) }
         save(updated)
     }
