@@ -16,6 +16,9 @@ final class DeadlineFlowerController {
     private var popover: NSPopover?
     private var hoveredID: String?
     private var visible = true
+    // Keep current positions steady while harvested sprites fracture. The
+    // replacement flowers arrive only after the final effect has finished.
+    private var effects: [UUID: (panel: NSPanel, view: HarvestSlashEffectView, slot: Int)] = [:]
 
     init(garden: DeadlineGarden,
          screenFrame: @escaping () -> NSRect = { NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 1440, height: 900) },
@@ -36,10 +39,16 @@ final class DeadlineFlowerController {
 
     func setVisible(_ value: Bool) {
         visible = value
-        if value { synchronize() }
-        else {
+        if value {
+            if effects.isEmpty { synchronize() }
+            else {
+                flowers.filter { !$0.view.isHarvesting }.forEach { $0.panel.orderFrontRegardless() }
+                effects.values.forEach { $0.panel.orderFrontRegardless() }
+            }
+        } else {
             closeDetails()
             flowers.forEach { $0.panel.orderOut(nil) }
+            effects.values.forEach { $0.panel.orderOut(nil) }
         }
     }
 
@@ -52,6 +61,14 @@ final class DeadlineFlowerController {
                 y: area.minY
             ))
         }
+        for effect in effects.values {
+            let artwork = CompactFlowerArtwork.plants[effect.slot]
+            let size = effect.view.bounds.size
+            effect.panel.setFrameOrigin(NSPoint(
+                x: area.maxX - 300 + artwork.rootX - artwork.stemX - (size.width - artwork.size.width) / 2,
+                y: area.minY
+            ))
+        }
         closeDetails()
     }
 
@@ -61,21 +78,27 @@ final class DeadlineFlowerController {
         timer?.invalidate()
         timer = nil
         closeDetails()
+        effects.values.forEach { effect in
+            effect.view.stop()
+            effect.panel.orderOut(nil)
+        }
+        effects.removeAll()
         flowers.forEach { $0.panel.orderOut(nil) }
         flowers = []
     }
 
     private func synchronize() {
+        guard effects.isEmpty else { return }
         closeDetails()
         flowers.forEach { $0.panel.orderOut(nil) }
         flowers = garden.visibleDeadlines.enumerated().map { index, deadline in
             let artwork = CompactFlowerArtwork.plants[index]
             let view = DeadlineFlowerView(artwork: artwork)
-            view.onHarvest = { [weak self] in self?.garden.harvest(id: deadline.id) }
+            view.onHarvest = { [weak self] in self?.harvestFlower(id: deadline.id) }
             view.onFiles = onFiles
             view.setAccessibilityElement(true)
             view.setAccessibilityRole(.button)
-            view.setAccessibilityLabel("\(deadline.title)，\(deadline.dueDate)，项目：\(deadline.project)；点击收获并完成")
+            view.setAccessibilityLabel("\(deadline.title)，\(deadline.dueDate)，项目：\(deadline.project)；双击采摘并完成")
             let panel = NSPanel(contentRect: NSRect(origin: .zero, size: artwork.size),
                                 styleMask: [.borderless, .nonactivatingPanel],
                                 backing: .buffered, defer: false)
@@ -95,6 +118,53 @@ final class DeadlineFlowerController {
         updatePointer()
     }
 
+    private func harvestFlower(id: String) {
+        guard visible,
+              garden.visibleDeadlines.contains(where: { $0.id == id }),
+              let slot = flowers.firstIndex(where: { $0.deadline.id == id }),
+              !flowers[slot].view.isHarvesting else { return }
+
+        let flower = flowers[slot]
+        // Completion/persistence happen on the second click, not when the VFX
+        // ends. This also makes rapid repeated clicks idempotent.
+        garden.harvest(id: id)
+        guard garden.deadlines.first(where: { $0.id == id })?.completedAt != nil else { return }
+        flower.view.isHarvesting = true
+        flower.panel.ignoresMouseEvents = true
+        flower.panel.orderOut(nil)
+        closeDetails()
+
+        let effectView = HarvestSlashEffectView(artwork: flower.view.artwork,
+            reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        let effectPanel = NSPanel(contentRect: CGRect(origin: .zero, size: effectView.bounds.size),
+                                  styleMask: [.borderless, .nonactivatingPanel],
+                                  backing: .buffered, defer: false)
+        effectPanel.isOpaque = false
+        effectPanel.backgroundColor = .clear
+        effectPanel.hasShadow = false
+        effectPanel.level = .floating
+        effectPanel.hidesOnDeactivate = false
+        effectPanel.isReleasedWhenClosed = false
+        effectPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        effectPanel.ignoresMouseEvents = true
+        effectPanel.contentView = effectView
+
+        let token = UUID()
+        effectView.onFinish = { [weak self] in self?.finishHarvestEffect(token) }
+        effects[token] = (effectPanel, effectView, slot)
+        reposition()
+        effectPanel.orderFrontRegardless()
+        effectView.start()
+    }
+
+    private func finishHarvestEffect(_ token: UUID) {
+        guard let effect = effects.removeValue(forKey: token) else { return }
+        effect.view.stop()
+        effect.panel.orderOut(nil)
+        // Keep other flowers stationary while any sword-light scene is alive.
+        if effects.isEmpty { synchronize() }
+    }
+
     private func updatePointer() {
         guard visible else { return }
         let mouse = NSEvent.mouseLocation
@@ -102,7 +172,7 @@ final class DeadlineFlowerController {
         for flower in flowers {
             let local = NSPoint(x: mouse.x - flower.panel.frame.minX,
                                 y: mouse.y - flower.panel.frame.minY)
-            let hit = flower.view.containsArtwork(local)
+            let hit = !flower.view.isHarvesting && flower.view.containsArtwork(local)
             flower.panel.ignoresMouseEvents = !hit && !flower.view.isPressed
             if hit { hovered = flower }
         }
@@ -200,6 +270,7 @@ final class DeadlineFlowerView: NSView {
     var onHarvest: (() -> Void)?
     var onFiles: (([URL]) -> Void)?
     private var press: NSPoint?
+    var isHarvesting = false
     var isPressed: Bool { press != nil }
 
     init(artwork: CompactFlowerArtwork) {
@@ -223,17 +294,30 @@ final class DeadlineFlowerView: NSView {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? { containsArtwork(point) ? self : nil }
-    override func mouseDown(with event: NSEvent) { press = convert(event.locationInWindow, from: nil) }
+    override func mouseDown(with event: NSEvent) {
+        guard !isHarvesting else { return }
+        press = convert(event.locationInWindow, from: nil)
+    }
+
     override func mouseUp(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         let origin = press
         press = nil
-        guard let origin, hypot(point.x - origin.x, point.y - origin.y) < 6, containsArtwork(point) else { return }
+        guard let origin, hypot(point.x - origin.x, point.y - origin.y) < 6 else { return }
+        completeClick(at: point, clickCount: event.clickCount)
+    }
+
+    // Native double-click event count comes from AppKit; a single click only
+    // opens the hover details and must never mutate a deadline.
+    func completeClick(at point: NSPoint, clickCount: Int) {
+        guard !isHarvesting, clickCount >= 2, containsArtwork(point) else { return }
         onHarvest?()
     }
 
     override func accessibilityPerformPress() -> Bool {
-        guard let onHarvest else { return false }
+        // Accessibility "press" is an explicit activation (no double-click
+        // gesture is available to VoiceOver).
+        guard !isHarvesting, let onHarvest else { return false }
         onHarvest()
         return true
     }
