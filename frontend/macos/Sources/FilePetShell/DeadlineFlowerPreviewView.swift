@@ -61,7 +61,7 @@ struct DeadlineFlowerDetailsView: View {
                     .foregroundStyle(.secondary).lineLimit(3)
             }
             Divider()
-            Text("单击花朵并确认，才会标记完成；可在菜单撤销采摘").font(.caption)
+            Text("双击花朵立即采摘，剑光将花瓣击碎落地；误操作可在菜单撤销").font(.caption)
             if queuedCount > 0 {
                 Text("另有 \(queuedCount) 项 DDL 排队，收获后依次开花")
                     .font(.caption).foregroundStyle(.secondary)
