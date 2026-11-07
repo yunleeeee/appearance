@@ -26,19 +26,30 @@ final class FlowerHarvestEffectTests: XCTestCase {
     }
 
     func testSlashSceneTimelineFallsToFloorThenFades() {
-        XCTAssertEqual(HarvestSlashTimeline.duration(reduceMotion: false), 1.42)
-        XCTAssertEqual(HarvestSlashTimeline.duration(reduceMotion: true), 0.22)
+        XCTAssertEqual(HarvestSlashTimeline.fractureTime, 0.48)
+        XCTAssertEqual(HarvestSlashTimeline.duration(reduceMotion: false), 1.58)
+        XCTAssertEqual(HarvestSlashTimeline.duration(reduceMotion: true), 0.24)
 
         let initial = HarvestSlashTimeline.fallOffset(elapsed: 0, launch: 90, centerY: 86)
         let lift = HarvestSlashTimeline.fallOffset(elapsed: 0.1, launch: 90, centerY: 86)
-        let landed = HarvestSlashTimeline.fallOffset(elapsed: 1, launch: 90, centerY: 86)
+        let landed = HarvestSlashTimeline.fallOffset(elapsed: 1.0, launch: 90, centerY: 86)
         XCTAssertEqual(initial, 0)
         XCTAssertGreaterThan(lift, initial)
-        XCTAssertEqual(landed, -79, accuracy: 0.001, "Pieces must settle near desktop floor")
+        XCTAssertEqual(landed, HarvestSlashTimeline.floorY - 86, accuracy: 0.001,
+                       "Pieces must settle on the desktop floor")
+        for centerY: CGFloat in [26, 53, 86, 150] {
+            for sample in stride(from: 0.0, through: 1.5, by: 0.05) {
+                let offset = HarvestSlashTimeline.fallOffset(
+                    elapsed: sample, launch: 90, centerY: centerY)
+                XCTAssertGreaterThanOrEqual(centerY + offset,
+                    HarvestSlashTimeline.floorY - 0.001,
+                    "No piece should fall through the floor")
+            }
+        }
 
-        XCTAssertEqual(HarvestSlashTimeline.opacity(elapsed: 0.4), 1)
+        XCTAssertEqual(HarvestSlashTimeline.opacity(elapsed: 0.48), 1)
         XCTAssertGreaterThan(HarvestSlashTimeline.opacity(elapsed: 1.0), 0)
-        XCTAssertEqual(HarvestSlashTimeline.opacity(elapsed: 1.42), 0)
+        XCTAssertEqual(HarvestSlashTimeline.opacity(elapsed: 1.58), 0)
     }
 
     func testEffectIsLargerThanArtworkAndDoesNotConsumeMouseEvents() throws {
@@ -47,6 +58,7 @@ final class FlowerHarvestEffectTests: XCTestCase {
         XCTAssertGreaterThan(effect.bounds.width, artwork.size.width)
         XCTAssertGreaterThan(effect.bounds.height, artwork.size.height)
         XCTAssertFalse(effect.isOpaque)
+        XCTAssertEqual(effect.bounds.width, HarvestSlashEffectView.canvasSize(for: artwork).width)
     }
 
     private func opaquePoint(in artwork: CompactFlowerArtwork, view: DeadlineFlowerView) -> CGPoint? {
