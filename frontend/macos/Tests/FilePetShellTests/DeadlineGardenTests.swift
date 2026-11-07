@@ -7,7 +7,8 @@ final class DeadlineGardenTests: XCTestCase {
     func testMultipleDeadlinesUseOneUrgentVisibleSlot() {
         let (defaults, suite) = isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
-        let garden = DeadlineGarden(defaults: defaults)
+        let now = ISO8601DateFormatter().date(from: "2026-11-01T00:00:00Z")!
+        let garden = DeadlineGarden(defaults: defaults, now: now)
         let fedAt = Date(timeIntervalSince1970: 1_000)
         let candidates = (1...5).map { deadline("ddl-\($0)", day: 10 - $0) }
 
@@ -23,7 +24,8 @@ final class DeadlineGardenTests: XCTestCase {
     func testHarvestCompletesVisibleFlowerAndImmediatelyPromotesNext() {
         let (defaults, suite) = isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
-        let garden = DeadlineGarden(defaults: defaults)
+        let now = ISO8601DateFormatter().date(from: "2026-11-01T00:00:00Z")!
+        let garden = DeadlineGarden(defaults: defaults, now: now)
         garden.feed((1...5).map { deadline("ddl-\($0)") })
         let harvestedAt = Date(timeIntervalSince1970: 2_000)
 

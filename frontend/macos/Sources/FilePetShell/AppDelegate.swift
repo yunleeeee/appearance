@@ -11,6 +11,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var dropInteraction: VineDropInteractionController?
     private var flowerController: DeadlineFlowerController?
+    private var fullScreenMonitor: FullScreenVisibilityMonitor?
+    private var fullScreenSuppressed = false
     private var reviewWindowController: ReviewWindowController?
     private var petVisible = true
     private var cancellables = Set<AnyCancellable>()
@@ -26,6 +28,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         }) { [weak self] files in
             self?.store.classifyFiles(files)
+        }
+        fullScreenMonitor = FullScreenVisibilityMonitor(isFullScreen: { [weak self] in
+            // A desktop-only panel joins ordinary Spaces, but not another
+            // application's native full-screen Space. This remains meaningful
+            // while the panel is ordered out, so restoration cannot self-lock.
+            NSApp.currentSystemPresentationOptions.contains(.fullScreen) ||
+                self?.vinePanel?.isOnActiveSpace == false
+        }) { [weak self] suppressed in
+            guard let self else { return }
+            self.fullScreenSuppressed = suppressed
+            self.flowerController?.setFullScreenSuppressed(suppressed)
+            self.setPanelVisible(self.petVisible)
         }
         createMenuBar()
         createApplicationMenu()
@@ -62,7 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panel.level = .floating
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenPrimary]
         panel.ignoresMouseEvents = true
 
         // 感应区域跟随横向葡萄藤面板尺寸，保留透明背景。
@@ -132,7 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func setPanelVisible(_ visible: Bool) {
         petVisible = visible
         // The trellis may sleep or hide while deadline flowers remain present.
-        if visible {
+        if visible && !fullScreenSuppressed {
             vinePanel?.orderFrontRegardless()
         } else {
             dropInteraction?.finishSession()
@@ -394,6 +408,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func quitApp() { NSApp.terminate(nil) }
 
     func applicationWillTerminate(_ notification: Notification) {
+        fullScreenMonitor?.stop()
         store.stop()
         dropInteraction?.stop()
         flowerController?.stop()

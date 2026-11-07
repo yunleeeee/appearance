@@ -1,8 +1,8 @@
 import AppKit
 
 /// Grounded flower grouping at the screen edge, independent of their deadlines.
-/// Single-flower placement is unchanged. Two or three plants share a compact
-/// baseline and form a small asymmetrical garden rather than separate widgets.
+/// Single and grouped flowers share a screen-relative baseline. Two or three
+/// plants form a compact asymmetrical garden rather than separate widgets.
 /// Layout is pure and can be checked without creating an NSPanel.
 enum DeadlineFlowerArrangement {
     /// Static character of a plant, separate from the deadline stage or wind.
@@ -37,18 +37,26 @@ enum DeadlineFlowerArrangement {
 
     static func rootOffsets(count: Int) -> [CGFloat] {
         switch count {
-        case 1: [-266]
-        case 2: [-266, -209] // compact 57pt gap lets basal meadow shoots visually connect
-        case 3: [-291, -235, -179] // 56pt gaps with gentle outward secondary poses
+        case 1: [-180]
+        case 2: [-180, -123] // compact 57pt gap lets basal meadow shoots visually connect
+        case 3: [-205, -149, -93] // 56pt gaps with gentle outward secondary poses
         default: []
         }
     }
 
-    /// In a two-flower composition a fully-bloomed left crown was visually
-    /// larger than the opening right crown. Reduce only the left blossom,
-    /// preserving the planted stem, leaves, NSPanel size, and hit geometry.
+    /// Keep a solo blossom in proportion to its stalk and leaves. The paired
+    /// left crown retains its smaller scale beside the taller right plant.
+    /// Scaling stays anchored at the calyx and is shared by drawing and hits.
     static func crownScale(index: Int, count: Int) -> CGFloat {
-        count == 2 && index == 0 ? 0.68 : 1
+        if count == 1 { return 0.72 }
+        return count == 2 && index == 0 ? 0.68 : 1
+    }
+
+    /// Give a solo plant a longer stalk without stretching its crown or moving
+    /// its grounded root. Grouped plants retain their approved canvas sizes.
+    static func canvasSize(for artworkSize: CGSize, count: Int) -> CGSize {
+        CGSize(width: artworkSize.width,
+               height: artworkSize.height + (count == 1 ? 18 : 0))
     }
 
     static func frameOrigin(screen: NSRect, stemX: CGFloat,

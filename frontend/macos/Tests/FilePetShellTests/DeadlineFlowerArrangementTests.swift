@@ -9,13 +9,35 @@ final class DeadlineFlowerArrangementTests: XCTestCase {
         let artwork = CompactFlowerArtwork.plants[0]
         let origin = try XCTUnwrap(DeadlineFlowerArrangement.frameOrigin(
             screen: screen, stemX: artwork.stemX, index: 0, count: 1))
-        XCTAssertEqual(origin.x + artwork.stemX, screen.maxX - 266)
+        XCTAssertEqual(origin.x + artwork.stemX, screen.maxX - 180)
         XCTAssertEqual(origin.y, screen.minY)
+
+        let canvas = DeadlineFlowerArrangement.canvasSize(for: artwork.size, count: 1)
+        XCTAssertEqual(canvas.width, artwork.size.width)
+        let scale = DeadlineFlowerArrangement.crownScale(index: 0, count: 1)
+        for stage in DeadlineStage.allCases {
+            let previous = try XCTUnwrap(DeadlineFlowerMotion.geometry(
+                bounds: NSRect(origin: .zero, size: artwork.size), artwork: artwork,
+                stage: stage, stem: 0, head: 0, crownScale: scale))
+            let taller = try XCTUnwrap(DeadlineFlowerMotion.geometry(
+                bounds: NSRect(origin: .zero, size: canvas), artwork: artwork,
+                stage: stage, stem: 0, head: 0, crownScale: scale))
+            XCTAssertEqual(taller.root, previous.root)
+            XCTAssertGreaterThan(taller.calyx.y, previous.calyx.y,
+                                 "Extra height must extend the stalk above its fixed root")
+            XCTAssertEqual(taller.calyx.x, previous.calyx.x)
+            XCTAssertEqual(taller.rect.size, previous.rect.size,
+                           "A longer stalk must not enlarge the solo blossom")
+        }
     }
 
     func testTwoFlowersFormCompactPairOnSameGroundLine() throws {
         let screen = NSRect(x: 120, y: 35, width: 1152, height: 800)
         let plants = CompactFlowerArtwork.plants
+        for artwork in plants.prefix(2) {
+            XCTAssertEqual(DeadlineFlowerArrangement.canvasSize(for: artwork.size, count: 2),
+                           artwork.size)
+        }
         let small = try XCTUnwrap(DeadlineFlowerArrangement.frameOrigin(
             screen: screen, stemX: plants[0].stemX, index: 0, count: 2))
         let tall = try XCTUnwrap(DeadlineFlowerArrangement.frameOrigin(
@@ -37,19 +59,21 @@ final class DeadlineFlowerArrangementTests: XCTestCase {
         XCTAssertEqual(offsets[1] - offsets[0], 56)
         XCTAssertEqual(offsets[2] - offsets[1], 56)
         for (i, artwork) in CompactFlowerArtwork.plants.enumerated() {
+            let canvas = DeadlineFlowerArrangement.canvasSize(for: artwork.size, count: 3)
+            XCTAssertEqual(canvas, artwork.size)
             let origin = try XCTUnwrap(DeadlineFlowerArrangement.frameOrigin(
                 screen: screen, stemX: artwork.stemX, index: i, count: 3))
             XCTAssertEqual(origin.y, screen.minY)
             XCTAssertGreaterThanOrEqual(origin.x, screen.minX)
-            XCTAssertLessThan(origin.x + artwork.size.width, screen.maxX)
+            XCTAssertLessThan(origin.x + canvas.width, screen.maxX)
             XCTAssertEqual(origin,
                 DeadlineFlowerArrangement.frameOrigin(
                     screen: screen, stemX: artwork.stemX, index: i, count: 3))
         }
     }
 
-    func testOnlyPairedLeftBlossomShrinksAndCalyxRemainsAttached() throws {
-        XCTAssertEqual(DeadlineFlowerArrangement.crownScale(index: 0, count: 1), 1)
+    func testSoloAndPairedBlossomsShrinkWithoutMovingCalyx() throws {
+        XCTAssertEqual(DeadlineFlowerArrangement.crownScale(index: 0, count: 1), 0.72)
         XCTAssertEqual(DeadlineFlowerArrangement.crownScale(index: 0, count: 2), 0.68)
         XCTAssertEqual(DeadlineFlowerArrangement.crownScale(index: 1, count: 2), 1)
         XCTAssertEqual(DeadlineFlowerArrangement.crownScale(index: 0, count: 3), 1)
@@ -60,6 +84,14 @@ final class DeadlineFlowerArrangementTests: XCTestCase {
         let unscaled = try XCTUnwrap(DeadlineFlowerMotion.geometry(
             bounds: NSRect(origin: .zero, size: left.size), artwork: left,
             stage: .bloom, stem: 0, head: 0))
+        let soloBounds = NSRect(origin: .zero,
+            size: DeadlineFlowerArrangement.canvasSize(for: left.size, count: 1))
+        let soloUnscaled = try XCTUnwrap(DeadlineFlowerMotion.geometry(
+            bounds: soloBounds, artwork: left, stage: .bloom, stem: 0, head: 0))
+        let solo = try XCTUnwrap(DeadlineFlowerMotion.geometry(
+            bounds: soloBounds, artwork: left,
+            stage: .bloom, stem: 0, head: 0,
+            crownScale: DeadlineFlowerArrangement.crownScale(index: 0, count: 1)))
         let scaled = try XCTUnwrap(DeadlineFlowerMotion.geometry(
             bounds: NSRect(origin: .zero, size: left.size), artwork: left,
             stage: .bloom, stem: 0, head: 0,
@@ -68,6 +100,10 @@ final class DeadlineFlowerArrangementTests: XCTestCase {
             bounds: NSRect(origin: .zero, size: right.size), artwork: right,
             stage: .opening, stem: 0, head: 0))
 
+        XCTAssertEqual(soloUnscaled.root, solo.root)
+        XCTAssertEqual(soloUnscaled.calyx, solo.calyx,
+            "A smaller solo crown must remain joined to its original stalk")
+        XCTAssertEqual(solo.rect.width / soloUnscaled.rect.width, 0.72, accuracy: 0.001)
         XCTAssertEqual(unscaled.root, scaled.root)
         XCTAssertEqual(unscaled.calyx, scaled.calyx,
             "Do not break the calyx/stem joint when reducing the blossom")
@@ -111,14 +147,16 @@ final class DeadlineFlowerArrangementTests: XCTestCase {
             for index in 0..<count {
                 let artwork = CompactFlowerArtwork.plants[index]
                 let pose = DeadlineFlowerArrangement.pose(index: index, count: count)
-                let bounds = NSRect(origin: .zero, size: artwork.size)
+                let crownScale = DeadlineFlowerArrangement.crownScale(index: index, count: count)
+                let bounds = NSRect(origin: .zero,
+                    size: DeadlineFlowerArrangement.canvasSize(for: artwork.size, count: count))
                 for stage in DeadlineStage.allCases {
                     let still = try XCTUnwrap(DeadlineFlowerMotion.geometry(
                         bounds: bounds, artwork: artwork, stage: stage,
-                        stem: 0, head: 0, pose: pose))
+                        stem: 0, head: 0, crownScale: crownScale, pose: pose))
                     let moving = try XCTUnwrap(DeadlineFlowerMotion.geometry(
                         bounds: bounds, artwork: artwork, stage: stage,
-                        stem: 0.7, head: -0.4, pose: pose))
+                        stem: 0.7, head: -0.4, crownScale: crownScale, pose: pose))
                     XCTAssertEqual(still.root, moving.root)
                     XCTAssertEqual(still.root.y, 3)
                     XCTAssertEqual(still.calyx.x, artwork.stemX + pose.tipShift)
@@ -127,7 +165,8 @@ final class DeadlineFlowerArrangementTests: XCTestCase {
                                   "Petals should remain in the existing window")
                     XCTAssertTrue(DeadlineFlowerMotion.hit(
                         still.calyx, bounds: bounds, artwork: artwork,
-                        stage: stage, stem: 0, head: 0, pose: pose),
+                        stage: stage, stem: 0, head: 0,
+                        crownScale: crownScale, pose: pose),
                         "The calyx must remain an interactive extension of the stem")
                 }
             }

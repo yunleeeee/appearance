@@ -10,6 +10,7 @@ final class ShellDeadlineRoutingTests: XCTestCase {
         let candidates = (1...5).map { deadline("ddl-\($0)") }
         let engine = GardenShellEngine(results: [result(deadlines: candidates)])
         let store = makeStore(engine, defaults: defaults)
+        store.garden.refreshTime(now: ISO8601DateFormatter().date(from: "2026-11-01T00:00:00Z")!)
 
         store.classifyFiles([file("notice.txt")])
         await store.waitUntilIdle()
@@ -41,7 +42,9 @@ final class ShellDeadlineRoutingTests: XCTestCase {
         let (defaults, suite) = isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
         let response = result(deadlines: (1...4).map { deadline("ddl-\($0)") })
+        let now = ISO8601DateFormatter().date(from: "2026-11-01T00:00:00Z")!
         let firstStore = makeStore(GardenShellEngine(results: [response]), defaults: defaults)
+        firstStore.garden.refreshTime(now: now)
         firstStore.classifyFiles([file("notice.txt")])
         await firstStore.waitUntilIdle()
         let completedAt = Date(timeIntervalSince1970: 2_000)
@@ -50,6 +53,7 @@ final class ShellDeadlineRoutingTests: XCTestCase {
 
         let restoredStore = makeStore(GardenShellEngine(results: [response]),
                                      defaults: UserDefaults(suiteName: suite)!)
+        restoredStore.garden.refreshTime(now: now)
         restoredStore.classifyFiles([file("notice.txt")])
         await restoredStore.waitUntilIdle()
 

@@ -98,6 +98,7 @@ final class DeadlineVisualProofTests: XCTestCase {
         for index in 0..<count {
             let artwork = CompactFlowerArtwork.plants[index]
             let view = DeadlineFlowerView(artwork: artwork)
+            view.setFrameSize(DeadlineFlowerArrangement.canvasSize(for: artwork.size, count: count))
             view.crownScale = DeadlineFlowerArrangement.crownScale(index: index, count: count)
             view.plantPose = DeadlineFlowerArrangement.pose(index: index, count: count)
             view.deadlineStage = count == 1 ? .bloom : [.opening, .bloom, .opening][index]

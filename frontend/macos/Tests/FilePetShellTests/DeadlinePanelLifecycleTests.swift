@@ -51,7 +51,7 @@ final class DeadlinePanelLifecycleTests: XCTestCase {
         let suite = "FilePetShell.PanelCount.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        let now = ISO8601DateFormatter().date(from: "2026-10-31T12:00:00Z")!
+        let now = ISO8601DateFormatter().date(from: "2026-11-01T00:00:00Z")!
         let garden = DeadlineGarden(defaults: defaults, now: now)
         garden.feed([
             candidate("closest", "2026-11-03"),
@@ -64,9 +64,17 @@ final class DeadlinePanelLifecycleTests: XCTestCase {
             onFiles: { _ in })
         defer { controller.stop() }
 
+        // Controller startup refreshes wall time; restore the fixture clock
+        // before checking visibility and panel identity.
+        garden.refreshTime(now: now)
+        controller.refreshFromGarden()
+
         let singleID = controller.panelIdentities["closest"]
         XCTAssertNotNil(singleID)
         XCTAssertEqual(controller.panelIdentities.count, 1)
+        guard let singleFrame = controller.panelFrames["closest"] else {
+            return XCTFail("The resident flower must have a native window")
+        }
 
         garden.setVisibleLimit(2)
         controller.refreshFromGarden()
@@ -74,6 +82,13 @@ final class DeadlinePanelLifecycleTests: XCTestCase {
         XCTAssertNotNil(secondID)
         XCTAssertEqual(controller.panelIdentities["closest"], singleID)
         XCTAssertEqual(controller.panelIdentities.count, 2)
+        guard let pairedFrame = controller.panelFrames["closest"] else {
+            return XCTFail("The original flower must survive regrouping")
+        }
+        XCTAssertEqual(pairedFrame.minY, singleFrame.minY,
+                       "Changing height must keep the root on the desktop baseline")
+        XCTAssertLessThan(pairedFrame.height, singleFrame.height,
+                          "Only the solo composition gets a longer stalk")
 
         garden.setVisibleLimit(3)
         controller.refreshFromGarden()
@@ -91,6 +106,7 @@ final class DeadlinePanelLifecycleTests: XCTestCase {
         controller.refreshFromGarden()
         XCTAssertEqual(controller.panelIdentities["closest"], singleID)
         XCTAssertEqual(controller.panelIdentities.count, 1)
+        XCTAssertEqual(controller.panelFrames["closest"], singleFrame)
         XCTAssertEqual(garden.activeDeadlines.count, 4,
                        "Hiding a flower never deletes its task")
     }

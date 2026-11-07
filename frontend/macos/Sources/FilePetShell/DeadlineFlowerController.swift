@@ -19,10 +19,18 @@ final class DeadlineFlowerController {
     private var popover: NSPopover?
     private var hoveredID: String?
     private var visible = true
+    private var fullScreenSuppressed = false
+    private var shouldShow: Bool { visible && !fullScreenSuppressed }
 
     // Observable identity seam for native window lifecycle regressions.
     var panelIdentities: [String: ObjectIdentifier] {
         Dictionary(uniqueKeysWithValues: flowers.map { ($0.deadline.id, ObjectIdentifier($0.panel)) })
+    }
+    var visiblePanelIDs: Set<String> {
+        Set(flowers.filter { $0.panel.isVisible }.map { $0.deadline.id })
+    }
+    var panelFrames: [String: NSRect] {
+        Dictionary(uniqueKeysWithValues: flowers.map { ($0.deadline.id, $0.panel.frame) })
     }
     func refreshFromGarden() { synchronize() }
 
@@ -43,6 +51,9 @@ final class DeadlineFlowerController {
         RunLoop.main.add(timer, forMode: .common)
         let workspace = NSWorkspace.shared.notificationCenter
         clockObservers.append((workspace, workspace.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.closeDetails() } }))
+        clockObservers.append((workspace, workspace.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated { self?.garden.refreshTime() } }))
         for name in ["NSSystemClockDidChangeNotification", "NSSystemTimeZoneDidChangeNotification",
@@ -58,10 +69,29 @@ final class DeadlineFlowerController {
 
     func setVisible(_ value: Bool) {
         visible = value
-        if value { synchronize() }
-        else {
+        applyVisibility()
+    }
+
+    func setFullScreenSuppressed(_ value: Bool) {
+        guard fullScreenSuppressed != value else { return }
+        fullScreenSuppressed = value
+        applyVisibility()
+    }
+
+    private func applyVisibility() {
+        if shouldShow {
+            synchronize()
+            flowers.forEach {
+                $0.panel.alphaValue = 1
+                $0.panel.orderFrontRegardless()
+            }
+        } else {
             closeDetails()
-            flowers.forEach { $0.panel.orderOut(nil) }
+            flowers.forEach {
+                $0.view.stopGust()
+                $0.panel.ignoresMouseEvents = true
+                $0.panel.orderOut(nil)
+            }
         }
     }
 
@@ -77,7 +107,14 @@ final class DeadlineFlowerController {
             guard let origin = DeadlineFlowerArrangement.frameOrigin(
                 screen: area, stemX: artwork.stemX,
                 index: index, count: ordered.count) else { continue }
-            if animated && visible && flower.panel.isVisible &&
+            let size = DeadlineFlowerArrangement.canvasSize(for: artwork.size, count: ordered.count)
+            if flower.panel.frame.size != size {
+                // Resize from the planted bottom edge, rather than preserving
+                // the top edge and briefly lifting the root during regrouping.
+                flower.panel.setFrame(NSRect(origin: flower.panel.frame.origin, size: size), display: false)
+            }
+            flower.view.setFrameSize(size)
+            if animated && shouldShow && flower.panel.isVisible &&
                 !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
                 NSAnimationContext.runAnimationGroup { context in
                     context.duration = 0.25
@@ -141,7 +178,7 @@ final class DeadlineFlowerController {
             panel.level = .floating
             panel.hidesOnDeactivate = false
             panel.isReleasedWhenClosed = false
-            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenPrimary]
             panel.ignoresMouseEvents = true
             panel.contentView = view
             next.append((deadline, panel, view, slot))
@@ -154,7 +191,7 @@ final class DeadlineFlowerController {
         // restart window animations or shift existing flower identities.
         reposition(animated: existing.count != next.count)
         for flower in next where existing[flower.deadline.id] == nil {
-            guard visible else { continue }
+            guard shouldShow else { continue }
             if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { flower.panel.alphaValue = 0 }
             flower.panel.orderFrontRegardless()
             guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { continue }
@@ -202,12 +239,14 @@ final class DeadlineFlowerController {
         let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                if self.visible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-                    for flower in self.flowers {
+                if self.shouldShow && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                    for flower in self.flowers where flower.panel.isVisible && flower.panel.isOnActiveSpace {
                         let phase = Double(flower.slot) * 0.13
                         DispatchQueue.main.asyncAfter(deadline: .now() + phase) { [weak self] in
                             MainActor.assumeIsolated {
-                                guard let self, self.flowers.contains(where: { $0.deadline.id == flower.deadline.id }) else { return }
+                                guard let self, self.shouldShow, flower.panel.isVisible,
+                                      flower.panel.isOnActiveSpace,
+                                      self.flowers.contains(where: { $0.deadline.id == flower.deadline.id }) else { return }
                                 flower.view.startGust(strength: CGFloat.random(in: -0.85...0.85))
                             }
                         }
@@ -233,10 +272,14 @@ final class DeadlineFlowerController {
     }
 
     private func updatePointer() {
-        guard visible else { return }
+        guard shouldShow else { closeDetails(); return }
         let mouse = NSEvent.mouseLocation
         var hovered: (deadline: GardenDeadline, panel: NSPanel, view: DeadlineFlowerView, slot: Int)?
         for flower in flowers {
+            guard flower.panel.isVisible, flower.panel.isOnActiveSpace else {
+                flower.panel.ignoresMouseEvents = true
+                continue
+            }
             let local = NSPoint(x: mouse.x - flower.panel.frame.minX,
                                 y: mouse.y - flower.panel.frame.minY)
             let hit = flower.view.containsArtwork(local)
