@@ -89,12 +89,14 @@ final class ShellStore: ObservableObject {
     init(client: (any EngineServing)? = nil, runtime: (any EngineRuntimeManaging)? = nil,
          defaults: UserDefaults = .standard,
          arguments: [String] = CommandLine.arguments,
-         pollInterval: UInt64 = 250_000_000, jobTimeout: TimeInterval = 90) {
-        if defaults === UserDefaults.standard {
+         pollInterval: UInt64 = 250_000_000, jobTimeout: TimeInterval = 90,
+         gardenNow: Date = Date()) {
+        if defaults === UserDefaults.standard,
+           Bundle.main.object(forInfoDictionaryKey: "FilePetReleaseChannel") as? String != "test" {
             ShellPreferencesMigration.restoreLegacySandboxValues(into: defaults)
         }
         vine = VineModel(defaults: defaults)
-        garden = DeadlineGarden(defaults: defaults)
+        garden = DeadlineGarden(defaults: defaults, now: gardenNow)
         reviewInbox = FileReviewInbox(defaults: defaults)
         archive = ClassificationArchive(defaults: defaults)
         self.defaults = defaults

@@ -8,7 +8,8 @@ cd "$FILEPET_LAUNCH_ROOT"
 if (( $# > 0 )); then
   exec "$FILEPET_LAUNCH_ROOT/run-dev.sh" "$@"
 fi
-FILEPET_LAUNCH_APP="$FILEPET_LAUNCH_ROOT/build/FilePetShell.app"
+FILEPET_LAUNCH_BUNDLE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' Info.plist)
+FILEPET_LAUNCH_APP="$FILEPET_LAUNCH_ROOT/build/$FILEPET_LAUNCH_BUNDLE_NAME.app"
 if [[ ! -x "$FILEPET_LAUNCH_APP/Contents/MacOS/FilePetShell" ]]; then
   "$FILEPET_LAUNCH_ROOT/build-app.sh"
 fi
