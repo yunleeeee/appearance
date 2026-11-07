@@ -213,7 +213,8 @@ final class ShellDeadlineRoutingTests: XCTestCase {
     }
 
     private func makeStore(_ engine: GardenShellEngine, defaults: UserDefaults) -> ShellStore {
-        ShellStore(client: engine, defaults: defaults, arguments: [], pollInterval: 1_000_000, jobTimeout: 1)
+        ShellStore(client: engine, defaults: defaults, arguments: [], pollInterval: 1_000_000, jobTimeout: 1,
+                   gardenNow: ISO8601DateFormatter().date(from: "2026-10-31T12:00:00Z")!)
     }
 
     private func file(_ name: String) -> URL { URL(fileURLWithPath: "/tmp/filepet-garden-tests/" + name) }
