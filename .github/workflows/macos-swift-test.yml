@@ -47,6 +47,9 @@ jobs:
             ffmpeg -hide_banner -loglevel error -y -framerate 24 \
               -i "$PROOFS/resident-breeze-frames/frame-%03d.png" \
               -c:v libx264 -pix_fmt yuv420p "$PROOFS/resident-breeze.mp4"
+            ffmpeg -hide_banner -loglevel error -y -framerate 24 \
+              -i "$PROOFS/harvest-sword-frames/frame-%03d.png" \
+              -c:v libx264 -pix_fmt yuv420p "$PROOFS/harvest-sword.mp4"
           else
             echo "ffmpeg unavailable: PNG frame sequences remain for reproduction."
           fi
