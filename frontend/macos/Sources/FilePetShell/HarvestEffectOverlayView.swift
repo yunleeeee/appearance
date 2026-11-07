@@ -46,7 +46,7 @@ final class HarvestEffectOverlayView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let flower = source, let stage = flower.deadlineStage,
-              let age = flower.harvestAge,
+              let age = flower.previewHarvestAge ?? flower.harvestAge,
               let ctx = NSGraphicsContext.current?.cgContext else { return }
         ctx.saveGState()
         // Geometry and the original atlas remain in the flower's local space.
