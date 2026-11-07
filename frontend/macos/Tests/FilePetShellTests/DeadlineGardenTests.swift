@@ -4,10 +4,14 @@ import XCTest
 
 @MainActor
 final class DeadlineGardenTests: XCTestCase {
+    private var fixtureNow: Date {
+        ISO8601DateFormatter().date(from: "2026-10-31T12:00:00Z")!
+    }
+
     func testMultipleDeadlinesUseOneUrgentVisibleSlot() {
         let (defaults, suite) = isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
-        let garden = DeadlineGarden(defaults: defaults)
+        let garden = DeadlineGarden(defaults: defaults, now: fixtureNow)
         let fedAt = Date(timeIntervalSince1970: 1_000)
         let candidates = (1...5).map { deadline("ddl-\($0)", day: 10 - $0) }
 
@@ -23,7 +27,7 @@ final class DeadlineGardenTests: XCTestCase {
     func testHarvestCompletesVisibleFlowerAndImmediatelyPromotesNext() {
         let (defaults, suite) = isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
-        let garden = DeadlineGarden(defaults: defaults)
+        let garden = DeadlineGarden(defaults: defaults, now: fixtureNow)
         garden.feed((1...5).map { deadline("ddl-\($0)") })
         let harvestedAt = Date(timeIntervalSince1970: 2_000)
 
@@ -45,13 +49,13 @@ final class DeadlineGardenTests: XCTestCase {
         let (defaults, suite) = isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
         let candidate = deadline("done", day: 3)
-        let garden = DeadlineGarden(defaults: defaults)
+        let garden = DeadlineGarden(defaults: defaults, now: fixtureNow)
         let createdAt = Date(timeIntervalSince1970: 1_000)
         let completedAt = Date(timeIntervalSince1970: 2_000)
         garden.feed([candidate], now: createdAt)
         garden.harvest(id: candidate.id, now: completedAt)
 
-        let restored = DeadlineGarden(defaults: UserDefaults(suiteName: suite)!)
+        let restored = DeadlineGarden(defaults: UserDefaults(suiteName: suite)!, now: fixtureNow)
         XCTAssertEqual(restored.deadlines, garden.deadlines)
         XCTAssertEqual(restored.deadlines[0].title, "提交实验报告")
         XCTAssertEqual(restored.deadlines[0].project, "软件工程")
@@ -68,7 +72,7 @@ final class DeadlineGardenTests: XCTestCase {
     func testSemanticKeyDeduplicatesRenamedScreenshotsAndSurvivesCompletion() {
         let (defaults, suite) = isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
-        let garden = DeadlineGarden(defaults: defaults)
+        let garden = DeadlineGarden(defaults: defaults, now: fixtureNow)
         var original = deadline("old-path")
         original.semanticKey = "task-same-ocr-content"
         var renamed = deadline("new-path")
@@ -76,7 +80,7 @@ final class DeadlineGardenTests: XCTestCase {
         XCTAssertEqual(garden.feed([original, renamed]), 1)
         XCTAssertEqual(garden.deadlines.count, 1)
         garden.harvest(id: original.id)
-        let restored = DeadlineGarden(defaults: UserDefaults(suiteName: suite)!)
+        let restored = DeadlineGarden(defaults: UserDefaults(suiteName: suite)!, now: fixtureNow)
         XCTAssertEqual(restored.feed([renamed]), 0)
         XCTAssertEqual(restored.deadlines.count, 1)
         XCTAssertNotNil(restored.deadlines[0].completedAt)
@@ -85,7 +89,7 @@ final class DeadlineGardenTests: XCTestCase {
     func testDifferentAssignmentsWithSameDateAndDistinctSemanticKeysRemainSeparate() {
         let (defaults, suite) = isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
-        let garden = DeadlineGarden(defaults: defaults)
+        let garden = DeadlineGarden(defaults: defaults, now: fixtureNow)
         var a = deadline("different-assignment-1")
         var b = deadline("different-assignment-2")
         a.semanticKey = "task-first"
