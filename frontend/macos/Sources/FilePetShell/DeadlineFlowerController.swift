@@ -90,7 +90,9 @@ final class DeadlineFlowerController {
             }
         } else {
             closeDetails()
+            animatingHarvest.removeAll()
             flowers.forEach {
+                $0.view.cancelHarvestEffect()
                 $0.view.stopGust()
                 $0.panel.ignoresMouseEvents = true
                 $0.panel.orderOut(nil)
@@ -142,7 +144,11 @@ final class DeadlineFlowerController {
         clockObservers.forEach { $0.0.removeObserver($0.1) }
         clockObservers.removeAll()
         closeDetails()
-        flowers.forEach { $0.panel.orderOut(nil) }
+        flowers.forEach {
+            $0.view.cancelHarvestEffect()
+            $0.view.stopGust()
+            $0.panel.orderOut(nil)
+        }
         flowers = []
         animatingHarvest.removeAll()
     }
@@ -272,7 +278,7 @@ final class DeadlineFlowerController {
     }
 
     private func requestHarvest(id: String) {
-        guard !animatingHarvest.contains(id),
+        guard shouldShow, !animatingHarvest.contains(id),
               garden.visibleDeadlines.contains(where: { $0.id == id }),
               let flower = flowers.first(where: { $0.deadline.id == id }) else { return }
         animatingHarvest.insert(id)
@@ -455,8 +461,21 @@ final class DeadlineFlowerView: NSView {
         startFrames(duration: HarvestSlashEffect.duration)
     }
 
+    /// Hiding or leaving the desktop cancels an unfinished harvest. Restoring
+    /// the panel shows the same active task, without stale frames or callbacks.
+    func cancelHarvestEffect() {
+        press = nil
+        guard harvestStart != nil else { return }
+        harvestStart = nil
+        harvestCompletion = nil
+        previousStage = nil
+        transitionStart = nil
+        stopGust()
+        needsDisplay = true
+    }
+
     func startGust(strength: CGFloat) {
-        guard !reduceMotion else { return }
+        guard !reduceMotion, !isHarvesting else { return }
         gustStrength = strength
         gustStart = Date()
         startFrames(duration: 2.5)

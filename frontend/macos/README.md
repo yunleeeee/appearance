@@ -1,10 +1,14 @@
-# 葡萄与 DDL 花朵（macOS）
+# 葡萄藤 · 切花测试版（macOS）
 
 外观唯一维护在 `appearance`。分类、正文提取和 DDL 提取由 Python 核心提供。可以在 App 中指定分类归档目录，归档在用户明确选择目录后执行校验式移动，原位置文件在目标落盘且验证成功后才删除。
 
 ## 打开 App
 
-双击 `build/FilePetShell.app` 即可。App 会自己启动并连接本机分类核心，终端不需要保持打开。无参数运行 `启动葡萄藤.command` 也会直接打开 App，不再询问文件夹。
+本分支基于稳定 `main`，实验双击切花特效。安装包使用独立标识 `com.filepet.GrapeShell.VFXTest` 和本地偏好，默认不导入稳定版的葡萄、任务或归档目录；测试前请使用文件副本。单击不完成任务，双击播放切花动画，动画结束后才采摘并补位。进入全屏或隐藏挂件会取消未完成的动画，返回桌面后该任务仍可继续处理。
+
+请先退出正在运行的葡萄藤，再构建或启动测试版；现有构建与开发脚本会阻止同时运行两个版本。
+
+双击 `build/FilePetShellVFXTest.app` 即可。App 会自己启动并连接本机分类核心，终端不需要保持打开。无参数运行 `启动葡萄藤.command` 也会直接打开 App，不再询问文件夹。
 
 自动模式使用当前用户的主目录作为核心可读取范围，仅在主动拖入或选择文件后分析，不扫描目录。macOS 对桌面、文稿、下载等位置的系统权限仍适用。App 为本机非 App Store 构建，不启用会阻止外部 Python 子进程的 App Sandbox；核心仍只绑定本机地址并执行其路径授权检查。
 
@@ -16,7 +20,7 @@
 
 ```bash
 ./build-app.sh
-open build/FilePetShell.app
+open build/FilePetShellVFXTest.app
 ```
 
 构建脚本默认使用相邻的 `filepet-engine/`，也可设置 `FILEPET_ENGINE_ROOT`。生成的 App 配置会记住这台机器上的核心路径；启动时的环境变量优先，其次检查记录的位置与相邻目录。缺少核心或环境时，App 会给出具体说明，离线动画仍可用。
@@ -36,7 +40,7 @@ open build/FilePetShell.app
 连接自己启动的核心：
 
 ```bash
-open build/FilePetShell.app --args --engine-url http://127.0.0.1:8765
+open build/FilePetShellVFXTest.app --args --engine-url http://127.0.0.1:8765
 ```
 
 显式 `--engine-url` 不会额外启动自动服务。切换模式前退出已运行的 App，避免 macOS 忽略新启动参数；之后从 Finder 直接打开 App 即恢复自动模式。

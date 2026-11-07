@@ -91,7 +91,8 @@ final class ShellStore: ObservableObject {
          arguments: [String] = CommandLine.arguments,
          pollInterval: UInt64 = 250_000_000, jobTimeout: TimeInterval = 90,
          gardenNow: Date = Date()) {
-        if defaults === UserDefaults.standard {
+        if defaults === UserDefaults.standard,
+           Bundle.main.object(forInfoDictionaryKey: "FilePetReleaseChannel") as? String != "test" {
             ShellPreferencesMigration.restoreLegacySandboxValues(into: defaults)
         }
         vine = VineModel(defaults: defaults)

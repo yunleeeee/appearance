@@ -91,6 +91,46 @@ final class HarvestSlashEffectTests: XCTestCase {
         XCTAssertFalse(end.showHead)
     }
 
+    func testFullScreenAndUserHideCancelHarvestWithoutCompletingTask() async throws {
+        _ = NSApplication.shared
+        let suite = "FilePetShell.HarvestVisibility.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let garden = DeadlineGarden(defaults: defaults)
+        garden.feed([EngineDeadline(id: "active", title: "提交报告", project: "课程",
+            dueDate: "2099-11-08", dueTime: "23:59", yearInferred: false,
+            evidence: "2099年11月8日23:59前提交报告")])
+        let controller = DeadlineFlowerController(garden: garden,
+            screenFrame: { NSRect(x: 0, y: 0, width: 1440, height: 900) },
+            onFiles: { _ in })
+        defer { controller.stop() }
+        let identity = try XCTUnwrap(controller.panelIdentities["active"])
+        let panel = try XCTUnwrap(NSApp.windows.first { ObjectIdentifier($0) == identity })
+        let view = try XCTUnwrap(panel.contentView as? DeadlineFlowerView)
+        view.reduceMotionOverride = false
+
+        for fullScreen in [true, false] {
+            XCTAssertTrue(view.accessibilityPerformPress())
+            XCTAssertTrue(view.isHarvesting)
+            XCTAssertNil(garden.deadlines.first?.completedAt,
+                         "The task completes after the cinematic, not on activation")
+            if fullScreen { controller.setFullScreenSuppressed(true) }
+            else { controller.setVisible(false) }
+            XCTAssertTrue(controller.visiblePanelIDs.isEmpty)
+            XCTAssertFalse(view.isHarvesting)
+            _ = view.accessibilityPerformPress()
+            XCTAssertFalse(view.isHarvesting, "A hidden task cannot start a cinematic")
+            try await Task.sleep(nanoseconds: UInt64((HarvestSlashEffect.duration + 0.10) * 1_000_000_000))
+            XCTAssertNil(garden.deadlines.first?.completedAt,
+                         "Cancelled animation callbacks must not finish a hidden task")
+            if fullScreen { controller.setFullScreenSuppressed(false) }
+            else { controller.setVisible(true) }
+            XCTAssertEqual(controller.visiblePanelIDs, ["active"])
+            XCTAssertEqual(controller.panelIdentities["active"], identity)
+            XCTAssertFalse(view.isHarvesting)
+        }
+    }
+
     func testReduceMotionPreservesRecognitionAndDisablesSwordFlight() {
         let first = HarvestSlashEffect.sample(at: 0, reduceMotion: true)
         XCTAssertTrue(first.showHead)
