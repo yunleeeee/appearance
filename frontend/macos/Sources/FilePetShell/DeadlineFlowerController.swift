@@ -19,6 +19,7 @@ final class DeadlineFlowerController {
     private var popover: NSPopover?
     private var hoveredID: String?
     private var animatingHarvest = Set<String>()
+    private var harvestOverlays: [String: (panel: NSPanel, view: HarvestEffectOverlayView)] = [:]
     private var visible = true
     private var fullScreenSuppressed = false
     private var shouldShow: Bool { visible && !fullScreenSuppressed }
@@ -91,6 +92,7 @@ final class DeadlineFlowerController {
         } else {
             closeDetails()
             animatingHarvest.removeAll()
+            cancelAllHarvestOverlays()
             flowers.forEach {
                 $0.view.cancelHarvestEffect()
                 $0.view.stopGust()
@@ -130,6 +132,12 @@ final class DeadlineFlowerController {
                 flower.panel.setFrameOrigin(origin)
             }
         }
+        for flower in flowers {
+            guard let overlay = harvestOverlays[flower.deadline.id] else { continue }
+            overlay.panel.setFrameOrigin(NSPoint(
+                x: flower.panel.frame.minX - HarvestEffectOverlayView.bleed,
+                y: flower.panel.frame.minY))
+        }
     }
 
     func stop() {
@@ -144,6 +152,7 @@ final class DeadlineFlowerController {
         clockObservers.forEach { $0.0.removeObserver($0.1) }
         clockObservers.removeAll()
         closeDetails()
+        cancelAllHarvestOverlays()
         flowers.forEach {
             $0.view.cancelHarvestEffect()
             $0.view.stopGust()
@@ -286,12 +295,51 @@ final class DeadlineFlowerController {
         // The overlay stays click-through during the sword cuts and falling
         // shards. No NSAlert or focus-stealing confirmation is ever presented.
         flower.panel.ignoresMouseEvents = true
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        if !reduceMotion {
+            let view = HarvestEffectOverlayView(flower: flower.view)
+            let panel = NSPanel(contentRect: CGRect(origin: .zero, size: view.bounds.size),
+                styleMask: [.borderless, .nonactivatingPanel],
+                backing: .buffered, defer: false)
+            panel.isOpaque = false
+            panel.backgroundColor = .clear
+            panel.hasShadow = false
+            panel.level = .floating
+            panel.hidesOnDeactivate = false
+            panel.isReleasedWhenClosed = false
+            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenPrimary]
+            panel.ignoresMouseEvents = true
+            panel.contentView = view
+            panel.setFrameOrigin(NSPoint(
+                x: flower.panel.frame.minX - HarvestEffectOverlayView.bleed,
+                y: flower.panel.frame.minY))
+            harvestOverlays[id] = (panel, view)
+            flower.view.renderHarvestInOverlay = true
+        }
         flower.view.beginHarvestEffect { [weak self] in
             guard let self else { return }
+            self.finishHarvestOverlay(id: id)
             self.animatingHarvest.remove(id)
             // Only an explicit double-click (or accessibility press) completes
             // the task. Never confuse an overdue wilt with harvesting.
             self.garden.harvest(id: id)
+        }
+        if let overlay = harvestOverlays[id] {
+            overlay.panel.orderFrontRegardless()
+            overlay.view.start()
+        }
+    }
+
+    private func finishHarvestOverlay(id: String) {
+        guard let overlay = harvestOverlays.removeValue(forKey: id) else { return }
+        overlay.view.stop()
+        overlay.panel.orderOut(nil)
+        flowers.first(where: { $0.deadline.id == id })?.view.renderHarvestInOverlay = false
+    }
+
+    private func cancelAllHarvestOverlays() {
+        for (id, _) in harvestOverlays {
+            finishHarvestOverlay(id: id)
         }
     }
 
@@ -411,6 +459,12 @@ final class DeadlineFlowerView: NSView {
     var onFiles: (([URL]) -> Void)?
     // Deterministic render seam for testing the original harvest effect.
     var previewHarvestAge: TimeInterval?
+    var renderHarvestInOverlay = false {
+        didSet { needsDisplay = true }
+    }
+    var harvestAge: TimeInterval? {
+        harvestStart.map { Date().timeIntervalSince($0) }
+    }
     // Deterministic render seams for CI visual proofs; nil during ordinary runtime.
     var previewWindAge: TimeInterval?
     var previewTransition: (from: DeadlineStage, progress: CGFloat)?
@@ -468,6 +522,7 @@ final class DeadlineFlowerView: NSView {
         guard harvestStart != nil else { return }
         harvestStart = nil
         harvestCompletion = nil
+        renderHarvestInOverlay = false
         previousStage = nil
         transitionStart = nil
         stopGust()
@@ -553,6 +608,7 @@ final class DeadlineFlowerView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         NSGraphicsContext.current?.imageInterpolation = .none
         if let stage = deadlineStage, previewHarvestAge != nil || harvestStart != nil {
+            if renderHarvestInOverlay && previewHarvestAge == nil { return }
             let age = previewHarvestAge
                 ?? Date().timeIntervalSince(harvestStart ?? Date())
             HarvestSlashEffect.draw(in: bounds, stage: stage, artwork: artwork,
