@@ -1,5 +1,14 @@
 import AppKit
 
+/// Mouse semantics are pure/testable: hover and one click inspect the flower,
+/// while a true second click with no drag completes the task.
+enum HarvestGesturePolicy {
+    static func accepts(clickCount: Int, displacement: CGFloat,
+                        onArtwork: Bool) -> Bool {
+        clickCount >= 2 && displacement < 6 && onArtwork
+    }
+}
+
 /// Original, time-limited harvest VFX: crossing luminous cuts, a sliced
 /// blossom, then pixel-textured shards falling to the desktop baseline.
 /// No third-party game assets, shaders, particle engines or idle timers.
