@@ -76,11 +76,11 @@ final class HarvestSlashEffectTests: XCTestCase {
         let cuts = HarvestSlashEffect.sample(at: 0.21, reduceMotion: false)
         XCTAssertTrue(cuts.showHead)
         XCTAssertFalse(cuts.finished)
-        let shatter = HarvestSlashEffect.sample(at: 0.42, reduceMotion: false)
+        let shatter = HarvestSlashEffect.sample(at: 0.54, reduceMotion: false)
         XCTAssertFalse(shatter.showHead)
         XCTAssertGreaterThan(shatter.shardOpacity, 0)
         XCTAssertGreaterThan(shatter.stemOpacity, 0)
-        let falling = HarvestSlashEffect.sample(at: 0.82, reduceMotion: false)
+        let falling = HarvestSlashEffect.sample(at: 1.21, reduceMotion: false)
         XCTAssertEqual(falling.stemOpacity, 0)
         XCTAssertGreaterThan(falling.shardOpacity, 0)
         XCTAssertLessThan(falling.shardOpacity, 1)
@@ -89,6 +89,29 @@ final class HarvestSlashEffectTests: XCTestCase {
         XCTAssertEqual(end.stemOpacity, 0)
         XCTAssertEqual(end.shardOpacity, 0)
         XCTAssertFalse(end.showHead)
+    }
+
+    func testPetalPhysicsNeverFallsThroughDesktopGround() {
+        for centerY in [CGFloat(10), 25, 54, 91, 130] {
+            for launch in [CGFloat(40), 74, 129, 175] {
+                for sample in stride(from: 0.0, through: 1.6, by: 0.04) {
+                    let dy = HarvestSlashEffect.verticalOffset(
+                        time: CGFloat(sample), launch: launch, centerY: centerY)
+                    XCTAssertGreaterThanOrEqual(centerY + dy,
+                        HarvestSlashEffect.floorY - 0.001)
+                }
+            }
+        }
+    }
+
+    func testExpandedOverlayCanvasDoesNotChangeOriginalFlowerGeometry() {
+        let flower = DeadlineFlowerView(artwork: CompactFlowerArtwork.plants[1])
+        let originalFrame = flower.frame
+        let overlay = HarvestEffectOverlayView(flower: flower)
+        XCTAssertGreaterThan(overlay.frame.width, originalFrame.width + 200)
+        XCTAssertGreaterThan(overlay.frame.height, originalFrame.height)
+        XCTAssertEqual(flower.frame, originalFrame)
+        XCTAssertFalse(overlay.isOpaque)
     }
 
     func testFullScreenAndUserHideCancelHarvestWithoutCompletingTask() async throws {
