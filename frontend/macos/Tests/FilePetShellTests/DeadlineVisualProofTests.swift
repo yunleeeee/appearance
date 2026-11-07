@@ -16,7 +16,8 @@ final class DeadlineVisualProofTests: XCTestCase {
         let snapshots = root.appendingPathComponent("six-stages", isDirectory: true)
         let transitions = root.appendingPathComponent("stage-change-frames", isDirectory: true)
         let breeze = root.appendingPathComponent("resident-breeze-frames", isDirectory: true)
-        for folder in [snapshots, transitions, breeze] {
+        let harvest = root.appendingPathComponent("harvest-sword-frames", isDirectory: true)
+        for folder in [snapshots, transitions, breeze, harvest] {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         }
         let artwork = CompactFlowerArtwork.plants[1]
@@ -49,6 +50,21 @@ final class DeadlineVisualProofTests: XCTestCase {
             let file = breeze.appendingPathComponent(String(format: "frame-%03d.png", i))
             try imageData(windView).write(to: file)
         }
+        // Original cut-and-shatter cinematic: 24 fps, ~1.5 s, including
+        // a short final empty hold so reviewers can verify full disappearance.
+        let harvestView = DeadlineFlowerView(artwork: artwork)
+        harvestView.deadlineStage = .bloom
+        harvestView.reduceMotionOverride = false
+        for i in 0..<36 {
+            harvestView.previewHarvestAge = min(
+                HarvestSlashEffect.duration, Double(i) / 24)
+            let file = harvest.appendingPathComponent(String(format: "frame-%03d.png", i))
+            try imageData(harvestView).write(to: file)
+        }
+        harvestView.reduceMotionOverride = true
+        harvestView.previewHarvestAge = 0.04
+        try imageData(harvestView).write(
+            to: root.appendingPathComponent("harvest-reduce-motion.png"))
         try groupedFlowers(count: 1).write(to: root.appendingPathComponent("one-flower-garden.png"))
         try groupedFlowers(count: 2).write(to: root.appendingPathComponent("two-flower-garden.png"))
         try groupedFlowers(count: 3).write(to: root.appendingPathComponent("three-flower-garden.png"))
