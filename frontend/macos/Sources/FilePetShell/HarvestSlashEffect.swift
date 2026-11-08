@@ -86,7 +86,7 @@ enum HarvestSlashEffect {
     /// vertices are also clamped below, after applying each shard's rotation.
     static func verticalOffset(time: CGFloat, launch: CGFloat, centerY: CGFloat) -> CGFloat {
         let t = max(0, time)
-        let gravity: CGFloat = 300
+        let gravity: CGFloat = 370
         let floorOffset = floorY - centerY
         let ballistic = launch * t - gravity * t * t
         if ballistic >= floorOffset { return ballistic }
@@ -292,8 +292,8 @@ enum HarvestSlashEffect {
         // Four brighter L-shaped corner markers trace the entire region.
         NSColor(calibratedRed: 0.80, green: 0.52, blue: 1,
                 alpha: alpha).setStroke()
-        for xSide: CGFloat in [0, 1] {
-            for ySide: CGFloat in [0, 1] {
+        for xSide in [CGFloat(0), CGFloat(1)] {
+            for ySide in [CGFloat(0), CGFloat(1)] {
                 let x = xSide == 0 ? frame.minX : frame.maxX
                 let y = ySide == 0 ? frame.minY : frame.maxY
                 let hx: CGFloat = xSide == 0 ? 1 : -1
@@ -309,7 +309,7 @@ enum HarvestSlashEffect {
     }
 
     private static func drawSwordStreaks(in rect: CGRect, age: TimeInterval) {
-        let lines = slashSegments(in: rect.insetBy(dx: 2, dy: 2))
+        let lines = slashSegments(in: rect.insetBy(dx: -14, dy: -9))
         for (index, start) in slashTimes.enumerated() {
             let t = age - start
             guard t >= 0 && t < 0.20 else { continue }
@@ -319,7 +319,7 @@ enum HarvestSlashEffect {
             let tip = CGPoint(x: a.x + (b.x - a.x) * p,
                               y: a.y + (b.y - a.y) * p)
             let length = hypot(b.x - a.x, b.y - a.y)
-            let trail = min(110, length * 0.48, CGFloat(t / 0.118) * length + 3)
+            let trail = min(110, min(length * 0.48, CGFloat(t / 0.118) * length + 3))
             let ux = (b.x - a.x) / max(1, length)
             let uy = (b.y - a.y) / max(1, length)
             let tail = CGPoint(x: tip.x - ux * trail, y: tip.y - uy * trail)
