@@ -76,11 +76,11 @@ final class HarvestSlashEffectTests: XCTestCase {
         let cuts = HarvestSlashEffect.sample(at: 0.21, reduceMotion: false)
         XCTAssertTrue(cuts.showHead)
         XCTAssertFalse(cuts.finished)
-        let shatter = HarvestSlashEffect.sample(at: 0.54, reduceMotion: false)
+        let shatter = HarvestSlashEffect.sample(at: 0.76, reduceMotion: false)
         XCTAssertFalse(shatter.showHead)
         XCTAssertGreaterThan(shatter.shardOpacity, 0)
-        XCTAssertGreaterThan(shatter.stemOpacity, 0)
-        let falling = HarvestSlashEffect.sample(at: 1.21, reduceMotion: false)
+        XCTAssertEqual(shatter.stemOpacity, 0, "The whole plant, including roots, shatters together")
+        let falling = HarvestSlashEffect.sample(at: 1.51, reduceMotion: false)
         XCTAssertEqual(falling.stemOpacity, 0)
         XCTAssertGreaterThan(falling.shardOpacity, 0)
         XCTAssertLessThan(falling.shardOpacity, 1)
@@ -89,6 +89,45 @@ final class HarvestSlashEffectTests: XCTestCase {
         XCTAssertEqual(end.stemOpacity, 0)
         XCTAssertEqual(end.shardOpacity, 0)
         XCTAssertFalse(end.showHead)
+    }
+
+    func testNineCutsCoverWholeRectangleIncludingRootAndCrown() {
+        let rectangle = CGRect(x: 0, y: 0, width: 160, height: 220)
+        XCTAssertEqual(HarvestSlashEffect.cuttingRect(in: rectangle), rectangle)
+        let segments = HarvestSlashEffect.slashSegments(in: rectangle)
+        XCTAssertEqual(segments.count, 9)
+        XCTAssertTrue(segments.contains { min($0.0.y, $0.1.y) < rectangle.height * 0.05 },
+                      "Sword streaks must strike the rooted bottom of the target area")
+        XCTAssertTrue(segments.contains { max($0.0.y, $0.1.y) > rectangle.height * 0.95 },
+                      "Sword streaks must also traverse the upper blossom")
+        XCTAssertTrue(segments.contains {
+            abs($0.0.y - $0.1.y) > rectangle.height * 0.8
+        }, "At least one blade must cross almost the entire height")
+    }
+
+    func testWholePlantSnapshotContainsPaintedRootAndStemFragments() throws {
+        let artwork = CompactFlowerArtwork.plants[1]
+        let bounds = CGRect(origin: .zero,
+            size: DeadlineFlowerArrangement.canvasSize(for: artwork.size, count: 1))
+        let snapshot = try XCTUnwrap(HarvestSlashEffect.makeSnapshot(
+            in: bounds, stage: .bloom, artwork: artwork,
+            crownScale: 0.72, pose: .solo))
+        XCTAssertEqual(snapshot.cutRect, bounds)
+        XCTAssertGreaterThan(snapshot.fragments.count, 30,
+                             "The entire planted image should fracture into many pieces")
+        XCTAssertTrue(snapshot.fragments.contains { $0.center.y < bounds.height * 0.10 },
+                      "The root and ground-level stem must become independent fragments")
+        XCTAssertTrue(snapshot.fragments.contains { $0.center.y > bounds.height * 0.67 },
+                      "The bloom must also fracture")
+        XCTAssertTrue(snapshot.fragments.contains {
+            $0.center.y > bounds.height * 0.23 && $0.center.y < bounds.height * 0.56
+        }, "The middle stem and leaves must not remain as an intact prop")
+
+        let rootPixels = (max(0, snapshot.pixelHeight - 28)..<snapshot.pixelHeight).reduce(0) {
+            sum, y in sum + snapshot.alpha[(y * snapshot.pixelWidth)..<((y + 1) * snapshot.pixelWidth)]
+                .filter { $0 > 22 }.count
+        }
+        XCTAssertGreaterThan(rootPixels, 0, "The original root/soil must be present in the raster")
     }
 
     func testPetalPhysicsNeverFallsThroughDesktopGround() {
@@ -203,9 +242,9 @@ final class HarvestSlashEffectTests: XCTestCase {
         flower.reduceMotionOverride = false
         flower.previewHarvestAge = 0.16
         let slash = try bitmap(for: flower)
-        flower.previewHarvestAge = 0.50
+        flower.previewHarvestAge = 0.81
         let breakApart = try bitmap(for: flower)
-        flower.previewHarvestAge = 0.80
+        flower.previewHarvestAge = 1.38
         let falling = try bitmap(for: flower)
         flower.previewHarvestAge = HarvestSlashEffect.duration
         let final = try bitmap(for: flower)
