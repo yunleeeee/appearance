@@ -8,11 +8,24 @@ final class HarvestEffectOverlayView: NSView {
 
     private weak var source: DeadlineFlowerView?
     private let sourceSize: CGSize
+    private let frozenStage: DeadlineStage?
+    private let plantSnapshot: HarvestSlashEffect.PlantSnapshot?
     private var frames: Timer?
 
     init(flower: DeadlineFlowerView) {
         source = flower
         sourceSize = flower.bounds.size
+        frozenStage = flower.deadlineStage
+        // Freeze the full native sprite before the source view enters harvest
+        // mode. The cached image includes crown, leaves, stem and ground root.
+        if let stage = flower.deadlineStage {
+            plantSnapshot = HarvestSlashEffect.makeSnapshot(
+                in: flower.bounds, stage: stage,
+                artwork: flower.artwork, crownScale: flower.crownScale,
+                pose: flower.plantPose)
+        } else {
+            plantSnapshot = nil
+        }
         super.init(frame: CGRect(x: 0, y: 0,
             width: flower.bounds.width + Self.bleed * 2,
             height: flower.bounds.height + 28))
@@ -45,7 +58,7 @@ final class HarvestEffectOverlayView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        guard let flower = source, let stage = flower.deadlineStage,
+        guard let flower = source, let stage = frozenStage,
               let age = flower.previewHarvestAge ?? flower.harvestAge,
               let ctx = NSGraphicsContext.current?.cgContext else { return }
         ctx.saveGState()
@@ -55,7 +68,7 @@ final class HarvestEffectOverlayView: NSView {
         HarvestSlashEffect.draw(in: CGRect(origin: .zero, size: sourceSize),
             stage: stage, artwork: flower.artwork,
             crownScale: flower.crownScale, pose: flower.plantPose,
-            age: age, reduceMotion: false)
+            age: age, reduceMotion: false, snapshot: plantSnapshot)
         ctx.restoreGState()
     }
 }
