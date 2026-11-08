@@ -344,7 +344,8 @@ final class DeadlineFlowerController {
     }
 
     private func cancelAllHarvestOverlays() {
-        for (id, _) in harvestOverlays {
+        // Snapshot IDs before mutating the dictionary during full-screen/hide.
+        for id in Array(harvestOverlays.keys) {
             finishHarvestOverlay(id: id)
         }
     }
