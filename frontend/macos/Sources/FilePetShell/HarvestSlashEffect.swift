@@ -181,8 +181,8 @@ enum HarvestSlashEffect {
                     let spread = CGFloat(20 + (i * 19) % 73)
                     let stem = row < rows * 2 / 3
                     result.append(Fragment(points: triangle, center: center,
-                        speedX: side * spread + offset,
-                        launch: CGFloat((stem ? 28 : 72) + (i * 29) % 98),
+                        speedX: side * (spread + 64) + offset * 0.95,
+                        launch: CGFloat((stem ? 25 : 58) + (i * 29) % 87),
                         rotation: side * CGFloat(1.7 + Double(i % 9) * 0.37),
                         delay: CGFloat(i % 7) * 0.006))
                 }
@@ -252,6 +252,7 @@ enum HarvestSlashEffect {
             drawFragments(snapshot, age: age, opacity: state.shardOpacity, context: ctx)
             drawGroundSparks(centerX: artwork.stemX, age: age)
             drawImpactFlash(at: CGPoint(x: artwork.stemX, y: battlefield.midY), age: age)
+            drawBurstDust(in: battlefield, age: age)
         }
         drawSwordStreaks(in: battlefield, age: age)
         drawFinalSlash(in: battlefield, age: age)
@@ -265,7 +266,9 @@ enum HarvestSlashEffect {
             let t = max(0, time - shard.delay)
             let theta = shard.rotation * t
             let cosine = cos(theta), sine = sin(theta)
-            let dx = shard.speedX * t * 0.88 + 8 * sin(t * 5 + shard.center.y * 0.27) * t
+            // Strong initial lateral blast, then air resistance.
+            let dx = shard.speedX * t * max(0.55, 1 - t * 0.32)
+                + 12 * sin(t * 5 + shard.center.y * 0.27) * t
             var dy = verticalOffset(time: t, launch: shard.launch, centerY: shard.center.y)
             let bottom = shard.points.map { point -> CGFloat in
                 let ox = point.x - shard.center.x, oy = point.y - shard.center.y
@@ -299,15 +302,14 @@ enum HarvestSlashEffect {
     /// A faint rectangular target field makes the user-perceived cut area
     /// cover the stalk and root rather than the blossom only.
     private static func drawRegionGuide(in rect: CGRect, age: TimeInterval) {
-        let alpha = CGFloat(min(1, age / 0.07)
-                            * max(0, 1 - age / shatterAt)) * 0.42
+        let alpha = CGFloat(min(1, age / 0.045)
+                            * max(0, 1 - age / 0.24)) * 0.30
         guard alpha > 0 else { return }
         let frame = rect.insetBy(dx: 1.5, dy: 2.5)
         NSColor(calibratedRed: 0.43, green: 0.20, blue: 0.82,
                 alpha: alpha * 0.45).setStroke()
-        let outline = NSBezierPath(rect: frame)
-        outline.lineWidth = 0.75
-        outline.stroke()
+        // Removed the continuous outline: it read as an editable selection
+        // box. Short corner locks are enough to sell the target area.
 
         // Four brighter L-shaped corner markers trace the entire region.
         NSColor(calibratedRed: 0.80, green: 0.52, blue: 1,
@@ -336,15 +338,19 @@ enum HarvestSlashEffect {
         let dx = tip.x - tail.x, dy = tip.y - tail.y
         let len = max(0.01, hypot(dx, dy))
         let nx = -dy / len, ny = dx / len
+        func at(_ f: CGFloat, side: CGFloat) -> CGPoint {
+            CGPoint(x: tail.x + dx * f + nx * width * side,
+                    y: tail.y + dy * f + ny * width * side)
+        }
+        // Six-point spearhead: needle tips at both ends, with asymmetric
+        // luminous mass; no more round-ended neon sticks.
         let path = NSBezierPath()
-        path.move(to: CGPoint(x: tail.x + nx * width * 0.05,
-                              y: tail.y + ny * width * 0.05))
-        path.line(to: CGPoint(x: tip.x + nx * width * 0.12,
-                              y: tip.y + ny * width * 0.12))
-        path.line(to: CGPoint(x: tip.x - nx * width * 0.12,
-                              y: tip.y - ny * width * 0.12))
-        path.line(to: CGPoint(x: tail.x - nx * width * 0.43,
-                              y: tail.y - ny * width * 0.43))
+        path.move(to: at(0, side: 0))
+        path.line(to: at(0.27, side: 0.37))
+        path.line(to: at(0.64, side: 0.22))
+        path.line(to: at(1, side: 0))
+        path.line(to: at(0.70, side: -0.19))
+        path.line(to: at(0.26, side: -0.33))
         path.close()
         color.setFill()
         path.fill()
@@ -368,12 +374,12 @@ enum HarvestSlashEffect {
             // A dark edge is necessary for a white macOS desktop; the core
             // stays narrow with no opaque rounded end caps.
             let tint = index.isMultiple(of: 3)
-                ? NSColor(calibratedRed: 0.12, green: 0.52, blue: 0.88, alpha: fade * 0.32)
-                : NSColor(calibratedRed: 0.25, green: 0.03, blue: 0.58, alpha: fade * 0.36)
-            blade(from: tail, to: tip, width: 22, color: tint)
-            blade(from: tail, to: tip, width: 7,
-                  color: NSColor(calibratedRed: 0.64, green: 0.34, blue: 1, alpha: fade * 0.83))
-            blade(from: tail, to: tip, width: 1.6,
+                ? NSColor(calibratedRed: 0.04, green: 0.33, blue: 0.73, alpha: fade * 0.63)
+                : NSColor(calibratedRed: 0.21, green: 0.02, blue: 0.51, alpha: fade * 0.74)
+            blade(from: tail, to: tip, width: 18, color: tint)
+            blade(from: tail, to: tip, width: 5,
+                  color: NSColor(calibratedRed: 0.73, green: 0.41, blue: 1, alpha: fade * 0.90))
+            blade(from: tail, to: tip, width: 1.1,
                   color: NSColor(calibratedWhite: 1, alpha: fade * 0.98))
             // Needle-thin echo follows, separated in space and time.
             let normal = CGPoint(x: -uy * 4, y: ux * 4)
@@ -402,13 +408,13 @@ enum HarvestSlashEffect {
         let tail = CGPoint(x: tip.x - ux * len * 0.70,
                            y: tip.y - uy * len * 0.70)
         let fade = CGFloat(max(0, 1 - t / 0.24))
-        blade(from: tail, to: tip, width: 43,
-              color: NSColor(calibratedRed: 0.27, green: 0.04, blue: 0.64,
-                             alpha: fade * 0.38))
-        blade(from: tail, to: tip, width: 15,
-              color: NSColor(calibratedRed: 0.77, green: 0.38, blue: 1,
-                             alpha: fade * 0.83))
-        blade(from: tail, to: tip, width: 3.2,
+        blade(from: tail, to: tip, width: 33,
+              color: NSColor(calibratedRed: 0.23, green: 0.02, blue: 0.51,
+                             alpha: fade * 0.69))
+        blade(from: tail, to: tip, width: 12,
+              color: NSColor(calibratedRed: 0.82, green: 0.44, blue: 1,
+                             alpha: fade * 0.93))
+        blade(from: tail, to: tip, width: 2.3,
               color: NSColor(calibratedWhite: 1, alpha: fade))
         // The brightest moment is only a brief central crossing, not a
         // fullscreen flash or a solid rectangular overlay.
@@ -487,4 +493,29 @@ enum HarvestSlashEffect {
             NSBezierPath(ovalIn: CGRect(x: x, y: y, width: size, height: size)).fill()
         }
     }
+    /// Small high-velocity diamond sparks accompany the first fracture.
+    private static func drawBurstDust(in rect: CGRect, age: TimeInterval) {
+        let t = age - shatterAt
+        guard t >= 0 && t < 0.39 else { return }
+        let fade = CGFloat(max(0, 1 - t / 0.39))
+        for i in 0..<42 {
+            let angle = CGFloat(i) * 2.399963
+            let radius = CGFloat(9 + (i * 17) % 27)
+                + CGFloat(t) * CGFloat(98 + (i * 13) % 190)
+            let x = rect.midX + cos(angle) * radius * 0.72
+            let y = rect.midY + sin(angle) * radius * 0.86
+            let size: CGFloat = i.isMultiple(of: 5) ? 2.9 : 1.5
+            let spark = NSBezierPath()
+            spark.move(to: CGPoint(x: x, y: y + size * 0.5))
+            spark.line(to: CGPoint(x: x + size * 1.2, y: y))
+            spark.line(to: CGPoint(x: x, y: y - size * 0.5))
+            spark.close()
+            (i.isMultiple(of: 3)
+                ? NSColor(calibratedRed: 0.94, green: 0.65, blue: 1, alpha: fade * 0.88)
+                : NSColor(calibratedRed: 0.42, green: 0.12, blue: 0.75, alpha: fade * 0.73)
+            ).setFill()
+            spark.fill()
+        }
+    }
+
 }
