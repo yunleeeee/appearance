@@ -17,6 +17,22 @@ enum HarvestSlashEffect {
     static let duration: TimeInterval = 1.62
     static let reducedDuration: TimeInterval = 0.16
     static let shatterAt: TimeInterval = 0.72
+    /// Moonlit Amethyst: one analogous violet family, an ivory-white blade
+    /// core and a tiny warm-metal accent only at the instant of impact.
+    /// Keep these colors centralized so every layer stays coherent.
+    enum Palette {
+        static let ink = NSColor(calibratedRed: 48.0 / 255, green: 35.0 / 255,
+                                 blue: 72.0 / 255, alpha: 1)       // #302348
+        static let amethyst = NSColor(calibratedRed: 141.0 / 255, green: 119.0 / 255,
+                                      blue: 219.0 / 255, alpha: 1) // #8D77DB
+        static let iris = NSColor(calibratedRed: 198.0 / 255, green: 183.0 / 255,
+                                  blue: 243.0 / 255, alpha: 1)     // #C6B7F3
+        static let pearl = NSColor(calibratedRed: 244.0 / 255, green: 240.0 / 255,
+                                   blue: 255.0 / 255, alpha: 1)    // #F4F0FF
+        static let champagne = NSColor(calibratedRed: 233.0 / 255, green: 200.0 / 255,
+                                       blue: 156.0 / 255, alpha: 1) // #E9C89C
+    }
+
     static let floorY: CGFloat = 2
     static let finisherAt: TimeInterval = 0.61
 
@@ -306,14 +322,12 @@ enum HarvestSlashEffect {
                             * max(0, 1 - age / 0.24)) * 0.30
         guard alpha > 0 else { return }
         let frame = rect.insetBy(dx: 1.5, dy: 2.5)
-        NSColor(calibratedRed: 0.43, green: 0.20, blue: 0.82,
-                alpha: alpha * 0.45).setStroke()
+        Palette.ink.withAlphaComponent(alpha * 0.35).setStroke()
         // Removed the continuous outline: it read as an editable selection
         // box. Short corner locks are enough to sell the target area.
 
         // Four brighter L-shaped corner markers trace the entire region.
-        NSColor(calibratedRed: 0.80, green: 0.52, blue: 1,
-                alpha: alpha).setStroke()
+        Palette.iris.withAlphaComponent(alpha * 0.82).setStroke()
         for xSide in [CGFloat(0), CGFloat(1)] {
             for ySide in [CGFloat(0), CGFloat(1)] {
                 let x = xSide == 0 ? frame.minX : frame.maxX
@@ -374,21 +388,20 @@ enum HarvestSlashEffect {
             // A dark edge is necessary for a white macOS desktop; the core
             // stays narrow with no opaque rounded end caps.
             let tint = index.isMultiple(of: 3)
-                ? NSColor(calibratedRed: 0.04, green: 0.33, blue: 0.73, alpha: fade * 0.63)
-                : NSColor(calibratedRed: 0.21, green: 0.02, blue: 0.51, alpha: fade * 0.74)
+                ? Palette.amethyst.withAlphaComponent(fade * 0.81)
+                : Palette.ink.withAlphaComponent(fade * 0.88)
             blade(from: tail, to: tip, width: 18, color: tint)
             blade(from: tail, to: tip, width: 5,
-                  color: NSColor(calibratedRed: 0.73, green: 0.41, blue: 1, alpha: fade * 0.90))
+                  color: Palette.amethyst.withAlphaComponent(fade * 0.94))
             blade(from: tail, to: tip, width: 1.1,
-                  color: NSColor(calibratedWhite: 1, alpha: fade * 0.98))
+                  color: Palette.pearl.withAlphaComponent(fade * 0.98))
             // Needle-thin echo follows, separated in space and time.
             let normal = CGPoint(x: -uy * 4, y: ux * 4)
             let echo = NSBezierPath()
             echo.move(to: CGPoint(x: tail.x + normal.x, y: tail.y + normal.y))
             echo.line(to: CGPoint(x: tip.x + normal.x, y: tip.y + normal.y))
             echo.lineWidth = 0.7
-            NSColor(calibratedRed: 0.57, green: 0.23, blue: 0.9,
-                    alpha: fade * 0.43).setStroke()
+            Palette.iris.withAlphaComponent(fade * 0.58).setStroke()
             echo.stroke()
         }
     }
@@ -409,13 +422,11 @@ enum HarvestSlashEffect {
                            y: tip.y - uy * len * 0.70)
         let fade = CGFloat(max(0, 1 - t / 0.24))
         blade(from: tail, to: tip, width: 33,
-              color: NSColor(calibratedRed: 0.23, green: 0.02, blue: 0.51,
-                             alpha: fade * 0.69))
+              color: Palette.ink.withAlphaComponent(fade * 0.88))
         blade(from: tail, to: tip, width: 12,
-              color: NSColor(calibratedRed: 0.82, green: 0.44, blue: 1,
-                             alpha: fade * 0.93))
+              color: Palette.amethyst.withAlphaComponent(fade * 0.97))
         blade(from: tail, to: tip, width: 2.3,
-              color: NSColor(calibratedWhite: 1, alpha: fade))
+              color: Palette.pearl.withAlphaComponent(fade))
         // Delayed pale-purple echo of the execution blade, offset from
         // its centerline to read as a fast blade rather than one fat ribbon.
         let side = CGPoint(x: -uy * 5.8, y: ux * 5.8)
@@ -423,8 +434,7 @@ enum HarvestSlashEffect {
         echo.move(to: CGPoint(x: tail.x + side.x, y: tail.y + side.y))
         echo.line(to: CGPoint(x: tip.x + side.x, y: tip.y + side.y))
         echo.lineWidth = 1.2
-        NSColor(calibratedRed: 0.66, green: 0.34, blue: 1,
-                alpha: fade * 0.65).setStroke()
+        Palette.iris.withAlphaComponent(fade * 0.70).setStroke()
         echo.stroke()
         // The brightest moment is only a brief central crossing, not a
         // fullscreen flash or a solid rectangular overlay.
@@ -434,7 +444,7 @@ enum HarvestSlashEffect {
             cross.move(to: CGPoint(x: rect.minX - 10, y: rect.midY))
             cross.line(to: CGPoint(x: rect.maxX + 10, y: rect.midY))
             cross.lineWidth = 1.5
-            NSColor(calibratedWhite: 1, alpha: impact * 0.85).setStroke()
+            Palette.pearl.withAlphaComponent(impact * 0.95).setStroke()
             cross.stroke()
         }
     }
@@ -449,8 +459,7 @@ enum HarvestSlashEffect {
             path.move(to: lines[index].0)
             path.line(to: lines[index].1)
             path.lineWidth = 1.3
-            NSColor(calibratedRed: 0.48, green: 0.16, blue: 0.86,
-                    alpha: alpha).setStroke()
+            Palette.amethyst.withAlphaComponent(alpha * 0.82).setStroke()
             path.stroke()
         }
     }
@@ -470,12 +479,11 @@ enum HarvestSlashEffect {
             beam.move(to: start)
             beam.line(to: end)
             beam.lineWidth = i.isMultiple(of: 4) ? 3 : 1.4
-            NSColor(calibratedRed: 0.59, green: 0.25, blue: 0.95,
-                    alpha: alpha * 0.75).setStroke()
+            (i.isMultiple(of: 4) ? Palette.champagne : Palette.amethyst)
+                .withAlphaComponent(alpha * (i.isMultiple(of: 4) ? 0.72 : 0.63)).setStroke()
             beam.stroke()
         }
-        NSColor(calibratedRed: 0.87, green: 0.57, blue: 1,
-                alpha: alpha * 0.45).setFill()
+        Palette.iris.withAlphaComponent(alpha * 0.44).setFill()
         NSBezierPath(ovalIn: CGRect(x: center.x - radius * 0.3,
                                    y: center.y - radius * 0.3,
                                    width: radius * 0.6, height: radius * 0.6)).fill()
@@ -489,16 +497,15 @@ enum HarvestSlashEffect {
         let ring = NSBezierPath(ovalIn: CGRect(x: centerX - spread / 2,
             y: floorY, width: spread, height: 5 + CGFloat(time * 3)))
         ring.lineWidth = 1.8
-        NSColor(calibratedRed: 0.56, green: 0.24, blue: 0.91,
-                alpha: fade * 0.65).setStroke()
+        Palette.amethyst.withAlphaComponent(fade * 0.52).setStroke()
         ring.stroke()
         for i in 0..<23 {
             let sign: CGFloat = i.isMultiple(of: 2) ? -1 : 1
             let x = centerX + sign * CGFloat(time) * CGFloat(40 + i * 6)
             let y = floorY + abs(sin(CGFloat(i) * 2.15))
                 * CGFloat(5 + (1 - time / 0.63) * 20)
-            NSColor(calibratedRed: 0.64, green: 0.30, blue: 0.98,
-                    alpha: fade * 0.80).setFill()
+            (i.isMultiple(of: 9) ? Palette.champagne : Palette.iris)
+                .withAlphaComponent(fade * 0.78).setFill()
             let size: CGFloat = i.isMultiple(of: 5) ? 3.3 : 1.6
             NSBezierPath(ovalIn: CGRect(x: x, y: y, width: size, height: size)).fill()
         }
@@ -521,8 +528,8 @@ enum HarvestSlashEffect {
             spark.line(to: CGPoint(x: x, y: y - size * 0.5))
             spark.close()
             (i.isMultiple(of: 3)
-                ? NSColor(calibratedRed: 0.94, green: 0.65, blue: 1, alpha: fade * 0.88)
-                : NSColor(calibratedRed: 0.42, green: 0.12, blue: 0.75, alpha: fade * 0.73)
+                ? Palette.champagne.withAlphaComponent(fade * 0.80)
+                : Palette.amethyst.withAlphaComponent(fade * 0.80)
             ).setFill()
             spark.fill()
         }
