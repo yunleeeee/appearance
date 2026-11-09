@@ -154,23 +154,63 @@ final class HarvestSlashEffectTests: XCTestCase {
         XCTAssertEqual(battle.minY, 1.5)
     }
 
-    func testMoonlitAmethystPaletteHasAConsistentLightnessHierarchy() {
-        let palette = HarvestSlashEffect.Palette.self
-        let ink = palette.ink.usingColorSpace(.deviceRGB)!
-        let amethyst = palette.amethyst.usingColorSpace(.deviceRGB)!
-        let iris = palette.iris.usingColorSpace(.deviceRGB)!
-        let pearl = palette.pearl.usingColorSpace(.deviceRGB)!
-        let champagne = palette.champagne.usingColorSpace(.deviceRGB)!
+    func testInksteelPaletteHasSteelHighlightsAndNeutralFinisher() {
+        let p = HarvestSlashEffect.Palette.self
+        let ink = p.ink.usingColorSpace(.deviceRGB)!
+        let steel = p.steel.usingColorSpace(.deviceRGB)!
+        let silver = p.silver.usingColorSpace(.deviceRGB)!
+        let pearl = p.pearl.usingColorSpace(.deviceRGB)!
+        let charcoal = p.charcoal.usingColorSpace(.deviceRGB)!
+        let ash = p.ash.usingColorSpace(.deviceRGB)!
+        let white = p.white.usingColorSpace(.deviceRGB)!
+        XCTAssertLessThan(ink.brightnessComponent, steel.brightnessComponent)
+        XCTAssertLessThan(steel.brightnessComponent, silver.brightnessComponent)
+        XCTAssertLessThan(silver.brightnessComponent, pearl.brightnessComponent)
+        for neutral in [charcoal, ash, white] {
+            XCTAssertEqual(neutral.redComponent, neutral.greenComponent, accuracy: 0.001)
+            XCTAssertEqual(neutral.greenComponent, neutral.blueComponent, accuracy: 0.001)
+        }
+    }
 
-        // Deep-purple silhouette reads on a light desktop, while highlights
-        // become steadily lighter without adding competing neon cyan.
-        XCTAssertLessThan(ink.brightnessComponent, amethyst.brightnessComponent)
-        XCTAssertLessThan(amethyst.brightnessComponent, iris.brightnessComponent)
-        XCTAssertLessThan(iris.brightnessComponent, pearl.brightnessComponent)
-        XCTAssertLessThan(abs(amethyst.hueComponent - iris.hueComponent), 0.1,
-            "Sword blade and trailing glow should remain analogous violet hues")
-        XCTAssertGreaterThan(champagne.redComponent, champagne.blueComponent,
-            "The restrained impact-only metallic accent should remain warm")
+    func testWholePlantLosesColorAtFinisherAndKeepsAlpha() throws {
+        XCTAssertEqual(HarvestSlashEffect.monochromeProgress(
+            at: HarvestSlashEffect.finisherAt - 0.01, reduceMotion: false), 0)
+        XCTAssertGreaterThan(HarvestSlashEffect.monochromeProgress(
+            at: HarvestSlashEffect.finisherAt + 0.05, reduceMotion: false), 0)
+        XCTAssertEqual(HarvestSlashEffect.monochromeProgress(
+            at: HarvestSlashEffect.shatterAt, reduceMotion: false), 1)
+        XCTAssertEqual(HarvestSlashEffect.monochromeProgress(
+            at: HarvestSlashEffect.shatterAt, reduceMotion: true), 0)
+
+        let artwork = CompactFlowerArtwork.plants[1]
+        let bounds = CGRect(origin: .zero, size: artwork.size)
+        let snapshot = try XCTUnwrap(HarvestSlashEffect.makeSnapshot(
+            in: bounds, stage: .bloom, artwork: artwork,
+            crownScale: 0.72, pose: .solo))
+        XCTAssertEqual(snapshot.monochromeRGBA.count,
+                       snapshot.pixelWidth * snapshot.pixelHeight * 4)
+        var opaque = 0
+        for i in stride(from: 0, to: snapshot.monochromeRGBA.count, by: 4) {
+            let rgb = snapshot.monochromeRGBA
+            XCTAssertEqual(rgb[i], rgb[i + 1], "Red/green channel must match")
+            XCTAssertEqual(rgb[i + 1], rgb[i + 2], "Green/blue channel must match")
+            XCTAssertEqual(rgb[i + 3], snapshot.alpha[i / 4],
+                           "Black-white conversion must preserve pixel alpha")
+            if rgb[i + 3] > 180 { opaque += 1 }
+        }
+        XCTAssertGreaterThan(opaque, 250, "The complete monochrome flower must be present")
+        let actual = HarvestSlashEffect.makeMonochromeRGBA([
+            180, 50, 30, 255,
+            0, 80, 110, 128,
+            0, 0, 0, 0
+        ])
+        XCTAssertEqual(actual.count, 12)
+        XCTAssertEqual(actual[0], actual[1])
+        XCTAssertEqual(actual[1], actual[2])
+        XCTAssertEqual(actual[4], actual[5])
+        XCTAssertEqual(actual[5], actual[6])
+        XCTAssertEqual(actual[7], 128)
+        XCTAssertEqual(Array(actual[8...11]), [0, 0, 0, 0])
     }
 
     func testPetalPhysicsNeverFallsThroughDesktopGround() {
