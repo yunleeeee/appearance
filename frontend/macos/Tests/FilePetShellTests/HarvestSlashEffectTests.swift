@@ -128,6 +128,11 @@ final class HarvestSlashEffectTests: XCTestCase {
                 .filter { $0 > 22 }.count
         }
         XCTAssertGreaterThan(rootPixels, 0, "The original root/soil must be present in the raster")
+        let velocities = snapshot.fragments.map { $0.speedX }
+        XCTAssertGreaterThan(Set(velocities.map { Int($0 / 10) }).count, 12,
+            "Fragment velocities must vary rather than form two uniform columns")
+        XCTAssertTrue(velocities.contains(where: { $0 < -60 }))
+        XCTAssertTrue(velocities.contains(where: { $0 > 60 }))
     }
 
     func testCinematicSequenceHasHitStopAndDecisiveFinisher() {
@@ -253,6 +258,18 @@ final class HarvestSlashEffectTests: XCTestCase {
         XCTAssertEqual(end.stemOpacity, 0)
         XCTAssertEqual(end.shardOpacity, 0)
         XCTAssertLessThan(HarvestSlashEffect.reducedDuration, HarvestSlashEffect.duration)
+    }
+
+    func testFinisherHasDistinctFrameFromTheHitStop() throws {
+        let flower = DeadlineFlowerView(artwork: CompactFlowerArtwork.plants[1])
+        flower.deadlineStage = .bloom
+        flower.reduceMotionOverride = false
+        flower.previewHarvestAge = 0.57
+        let still = try bitmap(for: flower)
+        flower.previewHarvestAge = 0.675
+        let finisher = try bitmap(for: flower)
+        XCTAssertNotEqual(still, finisher,
+            "The execution slash should be its own recognizable visual beat")
     }
 
     func testRenderedHarvestFramesChangeAndEndTransparent() throws {
