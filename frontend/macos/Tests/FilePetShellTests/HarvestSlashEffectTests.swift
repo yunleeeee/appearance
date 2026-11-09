@@ -154,6 +154,25 @@ final class HarvestSlashEffectTests: XCTestCase {
         XCTAssertEqual(battle.minY, 1.5)
     }
 
+    func testMoonlitAmethystPaletteHasAConsistentLightnessHierarchy() {
+        let palette = HarvestSlashEffect.Palette.self
+        let ink = palette.ink.usingColorSpace(.deviceRGB)!
+        let amethyst = palette.amethyst.usingColorSpace(.deviceRGB)!
+        let iris = palette.iris.usingColorSpace(.deviceRGB)!
+        let pearl = palette.pearl.usingColorSpace(.deviceRGB)!
+        let champagne = palette.champagne.usingColorSpace(.deviceRGB)!
+
+        // Deep-purple silhouette reads on a light desktop, while highlights
+        // become steadily lighter without adding competing neon cyan.
+        XCTAssertLessThan(ink.brightnessComponent, amethyst.brightnessComponent)
+        XCTAssertLessThan(amethyst.brightnessComponent, iris.brightnessComponent)
+        XCTAssertLessThan(iris.brightnessComponent, pearl.brightnessComponent)
+        XCTAssertLessThan(abs(amethyst.hueComponent - iris.hueComponent), 0.1,
+            "Sword blade and trailing glow should remain analogous violet hues")
+        XCTAssertGreaterThan(champagne.redComponent, champagne.blueComponent,
+            "The restrained impact-only metallic accent should remain warm")
+    }
+
     func testPetalPhysicsNeverFallsThroughDesktopGround() {
         for centerY in [CGFloat(10), 25, 54, 91, 130] {
             for launch in [CGFloat(40), 74, 129, 175] {
