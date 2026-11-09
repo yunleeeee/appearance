@@ -239,8 +239,6 @@ enum HarvestSlashEffect {
             return
         }
 
-        drawCombatVignette(in: battlefield, age: age)
-
         if age < shatterAt {
             // A deliberate 70ms hit-stop after the flurry makes the final
             // diagonal feel decisive rather than another equal-speed bar.
@@ -300,29 +298,6 @@ enum HarvestSlashEffect {
 
     private static let slashTimes: [TimeInterval] =
         [0.018, 0.082, 0.143, 0.204, 0.272, 0.335, 0.392]
-
-    /// A translucent, short-lived combat field. The white desktop had
-    /// flattened all the pastel highlights: this restrained dark-violet
-    /// vignette raises contrast only behind the original plant rectangle.
-    /// No fullscreen tint, no interaction capture and no persistent overlay.
-    private static func drawCombatVignette(in rect: CGRect, age: TimeInterval) {
-        guard age < shatterAt + 0.14 else { return }
-        let appear = min(1, CGFloat(age / 0.050))
-        let fade = min(1, CGFloat((shatterAt + 0.14 - age) / 0.17))
-        let finishBoost: CGFloat = age >= finisherAt ? 1.48 : 1
-        let alpha = appear * fade * finishBoost
-        guard alpha > 0 else { return }
-        let path = NSBezierPath(roundedRect: rect.insetBy(dx: -4, dy: 0),
-                                xRadius: 9, yRadius: 9)
-        NSColor(calibratedRed: 0.18, green: 0.10, blue: 0.34,
-                alpha: alpha * 0.10).setFill()
-        path.fill()
-        // An inner translucent sweep softens the flat rectangular boundary.
-        let inner = NSBezierPath(ovalIn: rect.insetBy(dx: 12, dy: 18))
-        NSColor(calibratedRed: 0.34, green: 0.20, blue: 0.58,
-                alpha: alpha * 0.072).setFill()
-        inner.fill()
-    }
 
     /// A faint rectangular target field makes the user-perceived cut area
     /// cover the stalk and root rather than the blossom only.
