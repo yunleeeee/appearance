@@ -450,6 +450,12 @@ enum HarvestSlashEffect {
             let tint = index.isMultiple(of: 3)
                 ? Palette.steel.withAlphaComponent(fade * 0.81)
                 : Palette.ink.withAlphaComponent(fade * 0.88)
+            // Offset graphite afterimage creates a recognizable shadow
+            // independently of the bright steel blade (not another neon hue).
+            let shadowTail = CGPoint(x: tail.x - uy * 4.2, y: tail.y + ux * 4.2)
+            let shadowTip = CGPoint(x: tip.x - uy * 4.2, y: tip.y + ux * 4.2)
+            blade(from: shadowTail, to: shadowTip, width: 7,
+                  color: Palette.ink.withAlphaComponent(fade * 0.33))
             blade(from: tail, to: tip, width: 18, color: tint)
             blade(from: tail, to: tip, width: 5,
                   color: Palette.steel.withAlphaComponent(fade * 0.94))
@@ -481,20 +487,22 @@ enum HarvestSlashEffect {
         let tail = CGPoint(x: tip.x - ux * len * 0.70,
                            y: tip.y - uy * len * 0.70)
         let fade = CGFloat(max(0, 1 - t / 0.24))
+        // The execution stroke is monochrome even while the last patches of
+        // color are draining out of the flower beneath it.
         blade(from: tail, to: tip, width: 33,
-              color: Palette.ink.withAlphaComponent(fade * 0.88))
+              color: Palette.charcoal.withAlphaComponent(fade * 0.92))
         blade(from: tail, to: tip, width: 12,
-              color: Palette.steel.withAlphaComponent(fade * 0.97))
+              color: Palette.ash.withAlphaComponent(fade * 0.96))
         blade(from: tail, to: tip, width: 2.3,
-              color: Palette.pearl.withAlphaComponent(fade))
-        // Delayed pale-purple echo of the execution blade, offset from
-        // its centerline to read as a fast blade rather than one fat ribbon.
+              color: Palette.white.withAlphaComponent(fade))
+        // One charcoal shadow peels away from the silvery finishing stroke,
+        // establishing swordlight and sword-shadow as two separate layers.
         let side = CGPoint(x: -uy * 5.8, y: ux * 5.8)
         let echo = NSBezierPath()
         echo.move(to: CGPoint(x: tail.x + side.x, y: tail.y + side.y))
         echo.line(to: CGPoint(x: tip.x + side.x, y: tip.y + side.y))
         echo.lineWidth = 1.2
-        Palette.silver.withAlphaComponent(fade * 0.70).setStroke()
+        Palette.charcoal.withAlphaComponent(fade * 0.75).setStroke()
         echo.stroke()
         // The brightest moment is only a brief central crossing, not a
         // fullscreen flash or a solid rectangular overlay.
@@ -504,7 +512,7 @@ enum HarvestSlashEffect {
             cross.move(to: CGPoint(x: rect.minX - 10, y: rect.midY))
             cross.line(to: CGPoint(x: rect.maxX + 10, y: rect.midY))
             cross.lineWidth = 1.5
-            Palette.pearl.withAlphaComponent(impact * 0.95).setStroke()
+            Palette.charcoal.withAlphaComponent(impact * 0.85).setStroke()
             cross.stroke()
         }
     }
@@ -539,11 +547,11 @@ enum HarvestSlashEffect {
             beam.move(to: start)
             beam.line(to: end)
             beam.lineWidth = i.isMultiple(of: 4) ? 3 : 1.4
-            (i.isMultiple(of: 8) ? Palette.ash : Palette.steel)
-                .withAlphaComponent(alpha * (i.isMultiple(of: 8) ? 0.72 : 0.63)).setStroke()
+            (i.isMultiple(of: 8) ? Palette.charcoal : Palette.ash)
+                .withAlphaComponent(alpha * (i.isMultiple(of: 8) ? 0.86 : 0.71)).setStroke()
             beam.stroke()
         }
-        Palette.silver.withAlphaComponent(alpha * 0.44).setFill()
+        Palette.ash.withAlphaComponent(alpha * 0.35).setFill()
         NSBezierPath(ovalIn: CGRect(x: center.x - radius * 0.3,
                                    y: center.y - radius * 0.3,
                                    width: radius * 0.6, height: radius * 0.6)).fill()
@@ -557,14 +565,14 @@ enum HarvestSlashEffect {
         let ring = NSBezierPath(ovalIn: CGRect(x: centerX - spread / 2,
             y: floorY, width: spread, height: 5 + CGFloat(time * 3)))
         ring.lineWidth = 1.8
-        Palette.steel.withAlphaComponent(fade * 0.52).setStroke()
+        Palette.charcoal.withAlphaComponent(fade * 0.58).setStroke()
         ring.stroke()
         for i in 0..<23 {
             let sign: CGFloat = i.isMultiple(of: 2) ? -1 : 1
             let x = centerX + sign * CGFloat(time) * CGFloat(40 + i * 6)
             let y = floorY + abs(sin(CGFloat(i) * 2.15))
                 * CGFloat(5 + (1 - time / 0.63) * 20)
-            (i.isMultiple(of: 9) ? Palette.ash : Palette.silver)
+            (i.isMultiple(of: 9) ? Palette.charcoal : Palette.ash)
                 .withAlphaComponent(fade * 0.78).setFill()
             let size: CGFloat = i.isMultiple(of: 5) ? 3.3 : 1.6
             NSBezierPath(ovalIn: CGRect(x: x, y: y, width: size, height: size)).fill()
@@ -588,8 +596,8 @@ enum HarvestSlashEffect {
             spark.line(to: CGPoint(x: x, y: y - size * 0.5))
             spark.close()
             (i.isMultiple(of: 9)
-                ? Palette.ash.withAlphaComponent(fade * 0.80)
-                : Palette.steel.withAlphaComponent(fade * 0.80)
+                ? Palette.charcoal.withAlphaComponent(fade * 0.82)
+                : Palette.ash.withAlphaComponent(fade * 0.77)
             ).setFill()
             spark.fill()
         }
