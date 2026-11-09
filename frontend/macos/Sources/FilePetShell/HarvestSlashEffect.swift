@@ -17,20 +17,20 @@ enum HarvestSlashEffect {
     static let duration: TimeInterval = 1.62
     static let reducedDuration: TimeInterval = 0.16
     static let shatterAt: TimeInterval = 0.72
-    /// Moonlit Amethyst: one analogous violet family, an ivory-white blade
-    /// core and a tiny warm-metal accent only at the instant of impact.
-    /// Keep these colors centralized so every layer stays coherent.
+    /// Inksteel: steel-blue sword reflections before the final strike,
+    /// strictly achromatic charcoal and silver once the plant breaks.
     enum Palette {
-        static let ink = NSColor(calibratedRed: 48.0 / 255, green: 35.0 / 255,
-                                 blue: 72.0 / 255, alpha: 1)       // #302348
-        static let amethyst = NSColor(calibratedRed: 141.0 / 255, green: 119.0 / 255,
-                                      blue: 219.0 / 255, alpha: 1) // #8D77DB
-        static let iris = NSColor(calibratedRed: 198.0 / 255, green: 183.0 / 255,
-                                  blue: 243.0 / 255, alpha: 1)     // #C6B7F3
-        static let pearl = NSColor(calibratedRed: 244.0 / 255, green: 240.0 / 255,
-                                   blue: 255.0 / 255, alpha: 1)    // #F4F0FF
-        static let champagne = NSColor(calibratedRed: 233.0 / 255, green: 200.0 / 255,
-                                       blue: 156.0 / 255, alpha: 1) // #E9C89C
+        static let ink = NSColor(calibratedRed: 32.0 / 255, green: 38.0 / 255,
+                                 blue: 46.0 / 255, alpha: 1)        // #20262E
+        static let steel = NSColor(calibratedRed: 89.0 / 255, green: 107.0 / 255,
+                                   blue: 122.0 / 255, alpha: 1)     // #596B7A
+        static let silver = NSColor(calibratedRed: 174.0 / 255, green: 187.0 / 255,
+                                    blue: 197.0 / 255, alpha: 1)    // #AEBBC5
+        static let pearl = NSColor(calibratedRed: 245.0 / 255, green: 247.0 / 255,
+                                   blue: 248.0 / 255, alpha: 1)     // #F5F7F8
+        static let charcoal = NSColor(calibratedWhite: 0.12, alpha: 1)
+        static let ash = NSColor(calibratedWhite: 0.47, alpha: 1)
+        static let white = NSColor(calibratedWhite: 0.98, alpha: 1)
     }
 
     static let floorY: CGFloat = 2
@@ -54,6 +54,9 @@ enum HarvestSlashEffect {
 
     struct PlantSnapshot {
         let image: NSImage
+        let monochromeImage: NSImage
+        /// Stored only for deterministic grayscale pixel tests.
+        let monochromeRGBA: [UInt8]
         /// This is the whole plant's rectangle, not the bloom geometry.
         let cutRect: CGRect
         let fragments: [Fragment]
@@ -73,6 +76,14 @@ enum HarvestSlashEffect {
         return Sample(showHead: !broken, stemOpacity: broken ? 0 : 1,
                       shardOpacity: broken ? max(0, min(1, CGFloat((duration - t) / 0.48))) : 0,
                       finished: t >= duration)
+    }
+
+    /// Color drains out *because* the execution sword lands. Before this beat
+    /// the plant is recognizably colored; by the fracture all its pixels and
+    /// every separated fragment are fully neutral black/white.
+    static func monochromeProgress(at seconds: TimeInterval, reduceMotion: Bool) -> CGFloat {
+        guard !reduceMotion else { return 0 }
+        return max(0, min(1, CGFloat((seconds - finisherAt) / 0.10)))
     }
 
     /// The cut area is explicitly rectangular and spans the complete native
@@ -153,14 +164,57 @@ enum HarvestSlashEffect {
         }
         guard let cgImage else { return nil }
         let image = NSImage(cgImage: cgImage, size: bounds.size)
+        let monochromeRGBA = makeMonochromeRGBA(rgba)
+        guard let provider = CGDataProvider(data: Data(monochromeRGBA) as CFData),
+              let monochromeCG = CGImage(
+                width: width, height: height,
+                bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: rowBytes,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue
+                    | CGBitmapInfo.byteOrder32Big.rawValue),
+                provider: provider, decode: nil,
+                shouldInterpolate: false, intent: .defaultIntent
+              ) else { return nil }
+        let monochrome = NSImage(cgImage: monochromeCG, size: bounds.size)
         let alpha = stride(from: 3, to: rgba.count, by: 4).map { rgba[$0] }
         let rect = cuttingRect(in: CGRect(origin: .zero, size: bounds.size))
         let fragments = makeFragments(rect: rect, width: width, height: height, alpha: alpha)
-        return PlantSnapshot(image: image, cutRect: rect, fragments: fragments,
+        return PlantSnapshot(image: image, monochromeImage: monochrome,
+                             monochromeRGBA: monochromeRGBA,
+                             cutRect: rect, fragments: fragments,
                              pixelWidth: width, pixelHeight: height, alpha: alpha)
     }
 
-    /// Screen-independent 8x14 triangular segmentation. Transparent tiles are
+    /// Contrast-preserving grayscale on RGBA premultiplied pixels. Alpha is
+    /// copied exactly: the original pixel-sharp foliage and edge masks survive.
+    static func makeMonochromeRGBA(_ rgba: [UInt8]) -> [UInt8] {
+        var output = rgba
+        guard rgba.count.isMultiple(of: 4) else { return output }
+        for i in stride(from: 0, to: rgba.count, by: 4) {
+            let a = Int(rgba[i + 3])
+            guard a > 0 else {
+                output[i] = 0
+                output[i + 1] = 0
+                output[i + 2] = 0
+                continue
+            }
+            // Convert to straight RGB before boosting luminance, then
+            // premultiply again; avoids dark fringes around thin leaves.
+            let r = min(255, Int(rgba[i]) * 255 / a)
+            let g = min(255, Int(rgba[i + 1]) * 255 / a)
+            let b = min(255, Int(rgba[i + 2]) * 255 / a)
+            let luminance = Double(r) * 0.2126 + Double(g) * 0.7152
+                + Double(b) * 0.0722
+            let gray = max(0, min(255, Int((luminance - 118) * 1.18 + 118)))
+            let premultiplied = UInt8((gray * a + 127) / 255)
+            output[i] = premultiplied
+            output[i + 1] = premultiplied
+            output[i + 2] = premultiplied
+        }
+        return output
+    }
+
+    /// Screen-independent 10x17 triangular segmentation. Transparent tiles are
     /// removed by testing actual raster pixels, including narrow root/stem lines.
     private static func makeFragments(rect: CGRect, width: Int, height: Int,
                                       alpha: [UInt8]) -> [Fragment] {
@@ -260,8 +314,14 @@ enum HarvestSlashEffect {
             // diagonal feel decisive rather than another equal-speed bar.
             let jitter: CGFloat = age > 0.12 && age < 0.52
                 ? sin(CGFloat(age) * 165) * 0.48 : 0
-            snapshot.image.draw(in: rect.offsetBy(dx: jitter, dy: 0),
-                                from: .zero, operation: .sourceOver, fraction: 1)
+            let imageRect = rect.offsetBy(dx: jitter, dy: 0)
+            let monochrome = monochromeProgress(at: age, reduceMotion: false)
+            snapshot.image.draw(in: imageRect, from: .zero,
+                                operation: .sourceOver, fraction: 1)
+            if monochrome > 0 {
+                snapshot.monochromeImage.draw(in: imageRect, from: .zero,
+                    operation: .sourceOver, fraction: monochrome)
+            }
             drawRegionGuide(in: battlefield, age: age)
             drawCutScars(in: battlefield, age: age)
         } else {
@@ -306,8 +366,8 @@ enum HarvestSlashEffect {
             cut.closeSubpath()
             context.addPath(cut)
             context.clip()
-            snapshot.image.draw(in: snapshot.cutRect, from: .zero,
-                                operation: .sourceOver, fraction: 1)
+            snapshot.monochromeImage.draw(in: snapshot.cutRect, from: .zero,
+                                          operation: .sourceOver, fraction: 1)
             context.restoreGState()
         }
     }
@@ -327,7 +387,7 @@ enum HarvestSlashEffect {
         // box. Short corner locks are enough to sell the target area.
 
         // Four brighter L-shaped corner markers trace the entire region.
-        Palette.iris.withAlphaComponent(alpha * 0.82).setStroke()
+        Palette.silver.withAlphaComponent(alpha * 0.82).setStroke()
         for xSide in [CGFloat(0), CGFloat(1)] {
             for ySide in [CGFloat(0), CGFloat(1)] {
                 let x = xSide == 0 ? frame.minX : frame.maxX
@@ -388,11 +448,11 @@ enum HarvestSlashEffect {
             // A dark edge is necessary for a white macOS desktop; the core
             // stays narrow with no opaque rounded end caps.
             let tint = index.isMultiple(of: 3)
-                ? Palette.amethyst.withAlphaComponent(fade * 0.81)
+                ? Palette.steel.withAlphaComponent(fade * 0.81)
                 : Palette.ink.withAlphaComponent(fade * 0.88)
             blade(from: tail, to: tip, width: 18, color: tint)
             blade(from: tail, to: tip, width: 5,
-                  color: Palette.amethyst.withAlphaComponent(fade * 0.94))
+                  color: Palette.steel.withAlphaComponent(fade * 0.94))
             blade(from: tail, to: tip, width: 1.1,
                   color: Palette.pearl.withAlphaComponent(fade * 0.98))
             // Needle-thin echo follows, separated in space and time.
@@ -401,7 +461,7 @@ enum HarvestSlashEffect {
             echo.move(to: CGPoint(x: tail.x + normal.x, y: tail.y + normal.y))
             echo.line(to: CGPoint(x: tip.x + normal.x, y: tip.y + normal.y))
             echo.lineWidth = 0.7
-            Palette.iris.withAlphaComponent(fade * 0.58).setStroke()
+            Palette.silver.withAlphaComponent(fade * 0.58).setStroke()
             echo.stroke()
         }
     }
@@ -424,7 +484,7 @@ enum HarvestSlashEffect {
         blade(from: tail, to: tip, width: 33,
               color: Palette.ink.withAlphaComponent(fade * 0.88))
         blade(from: tail, to: tip, width: 12,
-              color: Palette.amethyst.withAlphaComponent(fade * 0.97))
+              color: Palette.steel.withAlphaComponent(fade * 0.97))
         blade(from: tail, to: tip, width: 2.3,
               color: Palette.pearl.withAlphaComponent(fade))
         // Delayed pale-purple echo of the execution blade, offset from
@@ -434,7 +494,7 @@ enum HarvestSlashEffect {
         echo.move(to: CGPoint(x: tail.x + side.x, y: tail.y + side.y))
         echo.line(to: CGPoint(x: tip.x + side.x, y: tip.y + side.y))
         echo.lineWidth = 1.2
-        Palette.iris.withAlphaComponent(fade * 0.70).setStroke()
+        Palette.silver.withAlphaComponent(fade * 0.70).setStroke()
         echo.stroke()
         // The brightest moment is only a brief central crossing, not a
         // fullscreen flash or a solid rectangular overlay.
@@ -459,7 +519,7 @@ enum HarvestSlashEffect {
             path.move(to: lines[index].0)
             path.line(to: lines[index].1)
             path.lineWidth = 1.3
-            Palette.amethyst.withAlphaComponent(alpha * 0.82).setStroke()
+            Palette.steel.withAlphaComponent(alpha * 0.82).setStroke()
             path.stroke()
         }
     }
@@ -479,11 +539,11 @@ enum HarvestSlashEffect {
             beam.move(to: start)
             beam.line(to: end)
             beam.lineWidth = i.isMultiple(of: 4) ? 3 : 1.4
-            (i.isMultiple(of: 8) ? Palette.champagne : Palette.amethyst)
+            (i.isMultiple(of: 8) ? Palette.ash : Palette.steel)
                 .withAlphaComponent(alpha * (i.isMultiple(of: 8) ? 0.72 : 0.63)).setStroke()
             beam.stroke()
         }
-        Palette.iris.withAlphaComponent(alpha * 0.44).setFill()
+        Palette.silver.withAlphaComponent(alpha * 0.44).setFill()
         NSBezierPath(ovalIn: CGRect(x: center.x - radius * 0.3,
                                    y: center.y - radius * 0.3,
                                    width: radius * 0.6, height: radius * 0.6)).fill()
@@ -497,14 +557,14 @@ enum HarvestSlashEffect {
         let ring = NSBezierPath(ovalIn: CGRect(x: centerX - spread / 2,
             y: floorY, width: spread, height: 5 + CGFloat(time * 3)))
         ring.lineWidth = 1.8
-        Palette.amethyst.withAlphaComponent(fade * 0.52).setStroke()
+        Palette.steel.withAlphaComponent(fade * 0.52).setStroke()
         ring.stroke()
         for i in 0..<23 {
             let sign: CGFloat = i.isMultiple(of: 2) ? -1 : 1
             let x = centerX + sign * CGFloat(time) * CGFloat(40 + i * 6)
             let y = floorY + abs(sin(CGFloat(i) * 2.15))
                 * CGFloat(5 + (1 - time / 0.63) * 20)
-            (i.isMultiple(of: 9) ? Palette.champagne : Palette.iris)
+            (i.isMultiple(of: 9) ? Palette.ash : Palette.silver)
                 .withAlphaComponent(fade * 0.78).setFill()
             let size: CGFloat = i.isMultiple(of: 5) ? 3.3 : 1.6
             NSBezierPath(ovalIn: CGRect(x: x, y: y, width: size, height: size)).fill()
@@ -528,8 +588,8 @@ enum HarvestSlashEffect {
             spark.line(to: CGPoint(x: x, y: y - size * 0.5))
             spark.close()
             (i.isMultiple(of: 9)
-                ? Palette.champagne.withAlphaComponent(fade * 0.80)
-                : Palette.amethyst.withAlphaComponent(fade * 0.80)
+                ? Palette.ash.withAlphaComponent(fade * 0.80)
+                : Palette.steel.withAlphaComponent(fade * 0.80)
             ).setFill()
             spark.fill()
         }
