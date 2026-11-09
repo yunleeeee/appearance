@@ -294,7 +294,7 @@ enum HarvestSlashEffect {
     }
 
     private static let slashTimes: [TimeInterval] =
-        [0.028, 0.092, 0.155, 0.221, 0.291, 0.358, 0.432]
+        [0.018, 0.082, 0.143, 0.204, 0.272, 0.335, 0.392]
 
     /// A faint rectangular target field makes the user-perceived cut area
     /// cover the stalk and root rather than the blossom only.
