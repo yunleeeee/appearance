@@ -479,8 +479,8 @@ enum HarvestSlashEffect {
             beam.move(to: start)
             beam.line(to: end)
             beam.lineWidth = i.isMultiple(of: 4) ? 3 : 1.4
-            (i.isMultiple(of: 4) ? Palette.champagne : Palette.amethyst)
-                .withAlphaComponent(alpha * (i.isMultiple(of: 4) ? 0.72 : 0.63)).setStroke()
+            (i.isMultiple(of: 8) ? Palette.champagne : Palette.amethyst)
+                .withAlphaComponent(alpha * (i.isMultiple(of: 8) ? 0.72 : 0.63)).setStroke()
             beam.stroke()
         }
         Palette.iris.withAlphaComponent(alpha * 0.44).setFill()
@@ -527,7 +527,7 @@ enum HarvestSlashEffect {
             spark.line(to: CGPoint(x: x + size * 1.2, y: y))
             spark.line(to: CGPoint(x: x, y: y - size * 0.5))
             spark.close()
-            (i.isMultiple(of: 3)
+            (i.isMultiple(of: 9)
                 ? Palette.champagne.withAlphaComponent(fade * 0.80)
                 : Palette.amethyst.withAlphaComponent(fade * 0.80)
             ).setFill()
