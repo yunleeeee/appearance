@@ -76,11 +76,11 @@ final class HarvestSlashEffectTests: XCTestCase {
         let cuts = HarvestSlashEffect.sample(at: 0.21, reduceMotion: false)
         XCTAssertTrue(cuts.showHead)
         XCTAssertFalse(cuts.finished)
-        let shatter = HarvestSlashEffect.sample(at: 0.76, reduceMotion: false)
+        let shatter = HarvestSlashEffect.sample(at: 0.78, reduceMotion: false)
         XCTAssertFalse(shatter.showHead)
         XCTAssertGreaterThan(shatter.shardOpacity, 0)
         XCTAssertEqual(shatter.stemOpacity, 0, "The whole plant, including roots, shatters together")
-        let falling = HarvestSlashEffect.sample(at: 1.51, reduceMotion: false)
+        let falling = HarvestSlashEffect.sample(at: 1.40, reduceMotion: false)
         XCTAssertEqual(falling.stemOpacity, 0)
         XCTAssertGreaterThan(falling.shardOpacity, 0)
         XCTAssertLessThan(falling.shardOpacity, 1)
@@ -95,7 +95,7 @@ final class HarvestSlashEffectTests: XCTestCase {
         let rectangle = CGRect(x: 0, y: 0, width: 160, height: 220)
         XCTAssertEqual(HarvestSlashEffect.cuttingRect(in: rectangle), rectangle)
         let segments = HarvestSlashEffect.slashSegments(in: rectangle)
-        XCTAssertEqual(segments.count, 9)
+        XCTAssertEqual(segments.count, 7)
         XCTAssertTrue(segments.contains { min($0.0.y, $0.1.y) < rectangle.height * 0.05 },
                       "Sword streaks must strike the rooted bottom of the target area")
         XCTAssertTrue(segments.contains { max($0.0.y, $0.1.y) > rectangle.height * 0.95 },
@@ -128,6 +128,25 @@ final class HarvestSlashEffectTests: XCTestCase {
                 .filter { $0 > 22 }.count
         }
         XCTAssertGreaterThan(rootPixels, 0, "The original root/soil must be present in the raster")
+    }
+
+    func testCinematicSequenceHasHitStopAndDecisiveFinisher() {
+        XCTAssertGreaterThan(HarvestSlashEffect.finisherAt, 0.55)
+        XCTAssertLessThan(HarvestSlashEffect.finisherAt, HarvestSlashEffect.shatterAt)
+        XCTAssertGreaterThan(HarvestSlashEffect.shatterAt - HarvestSlashEffect.finisherAt, 0.08,
+            "The execution strike must be visibly distinct from the breakup")
+        let before = HarvestSlashEffect.sample(
+            at: HarvestSlashEffect.finisherAt - 0.03, reduceMotion: false)
+        XCTAssertTrue(before.showHead)
+        let atImpact = HarvestSlashEffect.sample(
+            at: HarvestSlashEffect.shatterAt, reduceMotion: false)
+        XCTAssertFalse(atImpact.showHead)
+        XCTAssertEqual(atImpact.stemOpacity, 0)
+        XCTAssertGreaterThan(atImpact.shardOpacity, 0)
+        let battle = HarvestSlashEffect.combatRect(
+            in: CGRect(x: 0, y: 0, width: 80, height: 180), rootX: 40)
+        XCTAssertGreaterThanOrEqual(battle.width, 154)
+        XCTAssertEqual(battle.minY, 1.5)
     }
 
     func testPetalPhysicsNeverFallsThroughDesktopGround() {
