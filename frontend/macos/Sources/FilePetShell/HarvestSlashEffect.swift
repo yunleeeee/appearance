@@ -422,7 +422,9 @@ enum HarvestSlashEffect {
             drawBurstDust(in: battlefield, age: age)
         }
         drawSwordStreaks(in: battlefield, age: age)
-        drawFinalSlash(in: battlefield, rootX: artwork.stemX, age: age)
+        // Draw the finishing blade in the same native coordinate system
+        // used by splitBySword; its pixel path and geometry now coincide.
+        drawFinalSlash(in: rect, rootX: artwork.stemX, age: age)
     }
 
     /// Two substantial cut masses open along the real execution line
