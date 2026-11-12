@@ -159,7 +159,11 @@ final class HarvestSlashEffectTests: XCTestCase {
             at: HarvestSlashEffect.shatterAt, reduceMotion: false)
         XCTAssertFalse(atImpact.showHead)
         XCTAssertEqual(atImpact.stemOpacity, 0)
-        XCTAssertGreaterThan(atImpact.shardOpacity, 0)
+        XCTAssertEqual(atImpact.shardOpacity, 0,
+            "The primary cut must form two slabs before any micro-fragments")
+        let debris = HarvestSlashEffect.sample(
+            at: HarvestSlashEffect.secondaryAt, reduceMotion: false)
+        XCTAssertGreaterThan(debris.shardOpacity, 0)
         let battle = HarvestSlashEffect.combatRect(
             in: CGRect(x: 0, y: 0, width: 80, height: 180), rootX: 40)
         XCTAssertGreaterThanOrEqual(battle.width, 154)
