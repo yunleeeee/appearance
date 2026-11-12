@@ -9,7 +9,7 @@ FILEPET_OPEN_APP=1
 FILEPET_ENGINE_PID=""
 
 usage() {
-  print "日常使用可直接双击 FilePetShell.app，App 会自动启动并连接分类核心。"
+  print "日常使用可直接双击本分支 build/ 内的 App，App 会自动启动并连接分类核心。"
   print "以下为自定义授权目录或外部核心的开发启动方式。"
   print "用法：./run-dev.sh --root <允许引擎读取的文件夹> [--port 8765] [--engine-only] [--engine-root <核心仓库>]"
   print "示例：./run-dev.sh --examples"
@@ -151,7 +151,8 @@ fi
 print "分类引擎：$FILEPET_ENGINE_URL"
 print "允许读取：$FILEPET_INPUT_ROOT"
 if (( FILEPET_OPEN_APP )); then
-  /usr/bin/open "$FILEPET_SHELL_ROOT/build/FilePetShell.app" --args --engine-url "$FILEPET_ENGINE_URL"
+  FILEPET_DEV_BUNDLE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$FILEPET_SHELL_ROOT/Info.plist")
+  /usr/bin/open "$FILEPET_SHELL_ROOT/build/$FILEPET_DEV_BUNDLE_NAME.app" --args --engine-url "$FILEPET_ENGINE_URL"
 fi
 print "保持本终端运行。Ctrl+C 停止本次引擎；葡萄藤的离线预览仍可使用。"
 wait "$FILEPET_ENGINE_PID"
