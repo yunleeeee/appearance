@@ -80,7 +80,7 @@ final class HarvestSlashEffectTests: XCTestCase {
         XCTAssertFalse(shatter.showHead)
         XCTAssertGreaterThan(shatter.shardOpacity, 0)
         XCTAssertEqual(shatter.stemOpacity, 0, "The whole plant, including roots, shatters together")
-        let falling = HarvestSlashEffect.sample(at: 1.40, reduceMotion: false)
+        let falling = HarvestSlashEffect.sample(at: 1.20, reduceMotion: false)
         XCTAssertEqual(falling.stemOpacity, 0)
         XCTAssertGreaterThan(falling.shardOpacity, 0)
         XCTAssertLessThan(falling.shardOpacity, 1)
@@ -133,10 +133,22 @@ final class HarvestSlashEffectTests: XCTestCase {
             "Fragment velocities must vary rather than form two uniform columns")
         XCTAssertTrue(velocities.contains(where: { $0 < -60 }))
         XCTAssertTrue(velocities.contains(where: { $0 > 60 }))
+        let sides = Set(snapshot.fragments.map { Int($0.side) })
+        XCTAssertEqual(sides, Set([-1, 1]), "Every piece belongs to one side of the real cut")
+        let cut = HarvestSlashEffect.executionLine(
+            in: snapshot.cutRect, rootX: artwork.stemX)
+        for piece in snapshot.fragments {
+            let pieces = HarvestSlashEffect.splitBySword(
+                piece.points, start: cut.start, end: cut.end)
+            let expected = piece.side > 0 ? pieces.positive : pieces.negative
+            XCTAssertEqual(HarvestSlashEffect.polygonArea(expected),
+                           HarvestSlashEffect.polygonArea(piece.points),
+                           accuracy: 0.005, "Fragments cannot straddle the finisher")
+        }
     }
 
     func testCinematicSequenceHasHitStopAndDecisiveFinisher() {
-        XCTAssertGreaterThan(HarvestSlashEffect.finisherAt, 0.55)
+        XCTAssertGreaterThan(HarvestSlashEffect.finisherAt, 0.35)
         XCTAssertLessThan(HarvestSlashEffect.finisherAt, HarvestSlashEffect.shatterAt)
         XCTAssertGreaterThan(HarvestSlashEffect.shatterAt - HarvestSlashEffect.finisherAt, 0.08,
             "The execution strike must be visibly distinct from the breakup")
@@ -211,6 +223,71 @@ final class HarvestSlashEffectTests: XCTestCase {
         XCTAssertEqual(actual[5], actual[6])
         XCTAssertEqual(actual[7], 128)
         XCTAssertEqual(Array(actual[8...11]), [0, 0, 0, 0])
+    }
+
+    func testExecutionLineSplitsPolygonWithoutLosingArea() {
+        let rect = CGRect(x: 0, y: 0, width: 110, height: 190)
+        let execution = HarvestSlashEffect.executionLine(in: rect, rootX: 56)
+        XCTAssertLessThan(abs(execution.start.x - 56), 20)
+        XCTAssertLessThan(abs(execution.end.x - 56), 20)
+        let corners = [
+            CGPoint(x: rect.minX, y: rect.minY),
+            CGPoint(x: rect.maxX, y: rect.minY),
+            CGPoint(x: rect.maxX, y: rect.maxY),
+            CGPoint(x: rect.minX, y: rect.maxY)
+        ]
+        let halves = HarvestSlashEffect.splitBySword(
+            corners, start: execution.start, end: execution.end)
+        XCTAssertGreaterThanOrEqual(halves.positive.count, 3)
+        XCTAssertGreaterThanOrEqual(halves.negative.count, 3)
+        let area = HarvestSlashEffect.polygonArea(halves.positive)
+            + HarvestSlashEffect.polygonArea(halves.negative)
+        XCTAssertEqual(area, rect.width * rect.height, accuracy: 0.1,
+                       "The sword's real geometry must partition the full image")
+        let crossing = HarvestSlashEffect.splitBySword([
+            CGPoint(x: 25, y: 80), CGPoint(x: 80, y: 80),
+            CGPoint(x: 80, y: 110), CGPoint(x: 25, y: 110)
+        ], start: execution.start, end: execution.end)
+        XCTAssertGreaterThan(HarvestSlashEffect.polygonArea(crossing.positive), 0)
+        XCTAssertGreaterThan(HarvestSlashEffect.polygonArea(crossing.negative), 0)
+    }
+
+    func testTwoStageSplitPreservesCutSeamAndNoDebrisBeforeRelease() {
+        XCTAssertEqual(HarvestSlashEffect.monochromeProgress(
+            at: HarvestSlashEffect.shatterAt, reduceMotion: false), 1)
+        XCTAssertGreaterThan(HarvestSlashEffect.secondaryAt, HarvestSlashEffect.shatterAt)
+        XCTAssertEqual(HarvestSlashEffect.primarySeparation(
+            at: HarvestSlashEffect.shatterAt), 0)
+        let middle = (HarvestSlashEffect.shatterAt + HarvestSlashEffect.secondaryAt) / 2
+        XCTAssertGreaterThan(HarvestSlashEffect.primarySeparation(at: middle), 0)
+        XCTAssertEqual(HarvestSlashEffect.primarySeparation(
+            at: HarvestSlashEffect.secondaryAt), 13, accuracy: 0.001)
+        let slab = HarvestSlashEffect.sample(at: middle, reduceMotion: false)
+        XCTAssertFalse(slab.showHead)
+        XCTAssertEqual(slab.stemOpacity, 0)
+        XCTAssertEqual(slab.shardOpacity, 0,
+                       "Two recognizable halves must be visible before micro-debris")
+        let shard = HarvestSlashEffect.sample(
+            at: HarvestSlashEffect.secondaryAt, reduceMotion: false)
+        XCTAssertGreaterThan(shard.shardOpacity, 0)
+        XCTAssertEqual(HarvestSlashEffect.sample(
+            at: HarvestSlashEffect.duration, reduceMotion: false).shardOpacity, 0)
+    }
+
+    func testOneFrameMonochromeNegativeIsConfinedToExecutionWindow() {
+        XCTAssertGreaterThan(HarvestSlashEffect.impactFrameAt,
+                             HarvestSlashEffect.finisherAt)
+        XCTAssertLessThan(HarvestSlashEffect.impactFrameAt
+                          + HarvestSlashEffect.impactFrameDuration,
+                          HarvestSlashEffect.shatterAt + 0.001)
+        let src: [UInt8] = [40, 100, 145, 255, 0, 0, 0, 0]
+        let normal = HarvestSlashEffect.makeMonochromeRGBA(src)
+        let negative = HarvestSlashEffect.makeMonochromeRGBA(src, inverted: true)
+        XCTAssertNotEqual(normal[0], negative[0])
+        XCTAssertEqual(negative[0], negative[1])
+        XCTAssertEqual(negative[1], negative[2])
+        XCTAssertEqual(negative[3], normal[3])
+        XCTAssertEqual(negative[7], 0)
     }
 
     func testPetalPhysicsNeverFallsThroughDesktopGround() {
@@ -323,9 +400,9 @@ final class HarvestSlashEffectTests: XCTestCase {
         let flower = DeadlineFlowerView(artwork: CompactFlowerArtwork.plants[1])
         flower.deadlineStage = .bloom
         flower.reduceMotionOverride = false
-        flower.previewHarvestAge = 0.57
+        flower.previewHarvestAge = 0.35
         let still = try bitmap(for: flower)
-        flower.previewHarvestAge = 0.675
+        flower.previewHarvestAge = 0.525
         let finisher = try bitmap(for: flower)
         XCTAssertNotEqual(still, finisher,
             "The execution slash should be its own recognizable visual beat")
@@ -337,9 +414,9 @@ final class HarvestSlashEffectTests: XCTestCase {
         flower.reduceMotionOverride = false
         flower.previewHarvestAge = 0.16
         let slash = try bitmap(for: flower)
-        flower.previewHarvestAge = 0.81
+        flower.previewHarvestAge = 0.65
         let breakApart = try bitmap(for: flower)
-        flower.previewHarvestAge = 1.38
+        flower.previewHarvestAge = 1.11
         let falling = try bitmap(for: flower)
         flower.previewHarvestAge = HarvestSlashEffect.duration
         let final = try bitmap(for: flower)
