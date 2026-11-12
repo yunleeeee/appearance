@@ -412,6 +412,16 @@ final class HarvestSlashEffectTests: XCTestCase {
             "The execution slash should be its own recognizable visual beat")
     }
 
+    func testSecondaryFractureHasNoDecorativeCenterFirework() throws {
+        // Regression for the screenshot showing an unrelated gray starburst
+        // between the two cut masses. With no painted shards, the secondary
+        // stage must remain completely transparent; only the actual clipped
+        // flower image can supply breakup pixels.
+        let view = EmptyFractureCanvas(artwork: CompactFlowerArtwork.plants[1])
+        XCTAssertTrue(try bitmap(for: view).allSatisfy { $0 == 0 },
+            "No center-origin rays, circles or fireworks without actual debris")
+    }
+
     func testRenderedHarvestFramesChangeAndEndTransparent() throws {
         let flower = DeadlineFlowerView(artwork: CompactFlowerArtwork.plants[1])
         flower.deadlineStage = .bloom
@@ -451,5 +461,30 @@ final class HarvestSlashEffectTests: XCTestCase {
         NSGraphicsContext.restoreGraphicsState()
         let raw = try XCTUnwrap(bitmap.bitmapData)
         return Array(UnsafeBufferPointer(start: raw, count: width * height * 4))
+    }
+}
+
+@MainActor
+private final class EmptyFractureCanvas: NSView {
+    private let artwork: CompactFlowerArtwork
+
+    init(artwork: CompactFlowerArtwork) {
+        self.artwork = artwork
+        super.init(frame: CGRect(origin: .zero, size: artwork.size))
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let transparent = NSImage(size: bounds.size)
+        let empty = HarvestSlashEffect.PlantSnapshot(
+            image: transparent, monochromeImage: transparent,
+            invertedImage: transparent, monochromeRGBA: [],
+            cutRect: bounds, fragments: [], pixelWidth: 0,
+            pixelHeight: 0, alpha: [])
+        HarvestSlashEffect.draw(in: bounds, stage: .bloom,
+            artwork: artwork, crownScale: 0.72, pose: .solo,
+            age: HarvestSlashEffect.secondaryAt + 0.08,
+            reduceMotion: false, snapshot: empty)
     }
 }
