@@ -323,8 +323,8 @@ enum HarvestSlashEffect {
                                             alpha: alpha) else { continue }
                         let i = ((row * columns + col) * 2 + half) * 2 + part
                         let center = CGPoint(
-                            x: points.map(\\.x).reduce(0, +) / CGFloat(points.count),
-                            y: points.map(\\.y).reduce(0, +) / CGFloat(points.count))
+                            x: points.map(\.x).reduce(0, +) / CGFloat(points.count),
+                            y: points.map(\.y).reduce(0, +) / CGFloat(points.count))
                         let side = candidate.1
                         let jitter = CGFloat((i * 41) % 47 - 23)
                         let lift = CGFloat((i * 29) % 61)
@@ -392,11 +392,9 @@ enum HarvestSlashEffect {
         }
 
         if age < shatterAt {
-            // A deliberate 70ms hit-stop after the flurry makes the final
-            // diagonal feel decisive rather than another equal-speed bar.
-            let jitter: CGFloat = age > 0.12 && age < 0.52
-                ? sin(CGFloat(age) * 165) * 0.48 : 0
-            let imageRect = rect.offsetBy(dx: jitter, dy: 0)
+            // The flower stays perfectly still between the two primary
+            // strikes and the execution cut: no sinusoidal perpetual jitter.
+            let imageRect = rect
             let monochrome = monochromeProgress(at: age, reduceMotion: false)
             snapshot.image.draw(in: imageRect, from: .zero,
                                 operation: .sourceOver, fraction: 1)
@@ -404,29 +402,86 @@ enum HarvestSlashEffect {
                 snapshot.monochromeImage.draw(in: imageRect, from: .zero,
                     operation: .sourceOver, fraction: monochrome)
             }
+            if age >= impactFrameAt &&
+               age < impactFrameAt + impactFrameDuration {
+                // Only the plant becomes a one/two-frame photographic
+                // negative. The entire desktop stays untouched.
+                snapshot.invertedImage.draw(in: rect, from: .zero,
+                                            operation: .sourceOver, fraction: 1)
+            }
             drawRegionGuide(in: battlefield, age: age)
             drawCutScars(in: battlefield, age: age)
+        } else if age < secondaryAt {
+            drawPrimaryHalves(snapshot, rootX: artwork.stemX,
+                              age: age, context: ctx)
         } else {
-            drawFragments(snapshot, age: age, opacity: state.shardOpacity, context: ctx)
+            drawFragments(snapshot, rootX: artwork.stemX, age: age,
+                          opacity: state.shardOpacity, context: ctx)
             drawGroundSparks(centerX: artwork.stemX, age: age)
             drawImpactFlash(at: CGPoint(x: artwork.stemX, y: battlefield.midY), age: age)
             drawBurstDust(in: battlefield, age: age)
         }
         drawSwordStreaks(in: battlefield, age: age)
-        drawFinalSlash(in: battlefield, age: age)
+        drawFinalSlash(in: battlefield, rootX: artwork.stemX, age: age)
     }
 
-    private static func drawFragments(_ snapshot: PlantSnapshot, age: TimeInterval,
+    /// Two substantial cut masses open along the real execution line
+    /// before the smaller shards release. The source is still the complete
+    /// monochrome plant, including ground and rooted stem.
+    private static func drawPrimaryHalves(_ snapshot: PlantSnapshot,
+                                          rootX: CGFloat, age: TimeInterval,
+                                          context: CGContext) {
+        let rect = snapshot.cutRect
+        let line = executionLine(in: rect, rootX: rootX)
+        let corners = [
+            CGPoint(x: rect.minX, y: rect.minY),
+            CGPoint(x: rect.maxX, y: rect.minY),
+            CGPoint(x: rect.maxX, y: rect.maxY),
+            CGPoint(x: rect.minX, y: rect.maxY)
+        ]
+        let sides = splitBySword(corners, start: line.start, end: line.end)
+        for (polygon, sign) in [(sides.positive, CGFloat(1)),
+                                (sides.negative, CGFloat(-1))] {
+            guard polygon.count >= 3, polygonArea(polygon) > 0.1 else { continue }
+            context.saveGState()
+            context.translateBy(x: sign * primarySeparation(at: age), y: 0)
+            let path = CGMutablePath()
+            for (i, point) in polygon.enumerated() {
+                if i == 0 { path.move(to: point) } else { path.addLine(to: point) }
+            }
+            path.closeSubpath()
+            context.addPath(path)
+            context.clip()
+            snapshot.monochromeImage.draw(in: rect, from: .zero,
+                                          operation: .sourceOver, fraction: 1)
+            context.restoreGState()
+        }
+        // A fine black seam is all that is needed during the hit-stop.
+        if age < shatterAt + 0.09 {
+            let scar = NSBezierPath()
+            scar.move(to: line.start)
+            scar.line(to: line.end)
+            scar.lineWidth = 0.9
+            Palette.charcoal.withAlphaComponent(
+                max(0, CGFloat((shatterAt + 0.09 - age) / 0.09)) * 0.74).setStroke()
+            scar.stroke()
+        }
+    }
+
+    private static func drawFragments(_ snapshot: PlantSnapshot, rootX: CGFloat,
+                                      age: TimeInterval,
                                       opacity: CGFloat, context: CGContext) {
         guard opacity > 0 else { return }
-        let time = CGFloat(max(0, age - shatterAt))
+        let time = CGFloat(max(0, age - secondaryAt))
+        let separation = primarySeparation(at: secondaryAt)
         for shard in snapshot.fragments {
             let t = max(0, time - shard.delay)
             let theta = shard.rotation * t
             let cosine = cos(theta), sine = sin(theta)
             // Strong initial lateral blast, then air resistance.
-            let dx = shard.speedX * t * max(0.55, 1 - t * 0.32)
-                + 12 * sin(t * 5 + shard.center.y * 0.27) * t
+            let dx = shard.side * separation
+                + shard.speedX * t * max(0.55, 1 - t * 0.32)
+                + 9 * sin(t * 5 + shard.center.y * 0.27) * t
             var dy = verticalOffset(time: t, launch: shard.launch, centerY: shard.center.y)
             let bottom = shard.points.map { point -> CGFloat in
                 let ox = point.x - shard.center.x, oy = point.y - shard.center.y
@@ -455,7 +510,7 @@ enum HarvestSlashEffect {
     }
 
     private static let slashTimes: [TimeInterval] =
-        [0.018, 0.082, 0.143, 0.204, 0.272, 0.335, 0.392]
+        [0.075, 0.094, 0.200, 0.224]
 
     /// A faint rectangular target field makes the user-perceived cut area
     /// cover the stalk and root rather than the blossom only.
@@ -513,62 +568,60 @@ enum HarvestSlashEffect {
     }
 
     private static func drawSwordStreaks(in rect: CGRect, age: TimeInterval) {
+        // Only two strokes are full-strength. The interleaved minor strokes
+        // provide depth, not four equally bright neon tubes.
+        let lineIDs = [0, 1, 4, 3]
         let lines = slashSegments(in: rect)
-        for (index, start) in slashTimes.enumerated() {
-            let t = age - start
-            guard t >= 0 && t < 0.145 else { continue }
-            let p = CGFloat(min(1, t / 0.062))
-            let fade = CGFloat(min(1, t / 0.012) * max(0, 1 - t / 0.145))
-            let a = lines[index].0, b = lines[index].1
-            let tip = CGPoint(x: a.x + (b.x - a.x) * p,
-                              y: a.y + (b.y - a.y) * p)
-            let len = hypot(b.x - a.x, b.y - a.y)
-            let ux = (b.x - a.x) / max(1, len)
-            let uy = (b.y - a.y) / max(1, len)
-            let trail = min(125, len * 0.63)
-            let tail = CGPoint(x: tip.x - ux * trail, y: tip.y - uy * trail)
-            // A dark edge is necessary for a white macOS desktop; the core
-            // stays narrow with no opaque rounded end caps.
-            let tint = index.isMultiple(of: 3)
-                ? Palette.steel.withAlphaComponent(fade * 0.81)
-                : Palette.ink.withAlphaComponent(fade * 0.88)
-            // Offset graphite afterimage creates a recognizable shadow
-            // independently of the bright steel blade (not another neon hue).
-            let shadowTail = CGPoint(x: tail.x - uy * 4.2, y: tail.y + ux * 4.2)
-            let shadowTip = CGPoint(x: tip.x - uy * 4.2, y: tip.y + ux * 4.2)
-            blade(from: shadowTail, to: shadowTip, width: 7,
-                  color: Palette.ink.withAlphaComponent(fade * 0.33))
-            blade(from: tail, to: tip, width: 18, color: tint)
-            blade(from: tail, to: tip, width: 5,
-                  color: Palette.steel.withAlphaComponent(fade * 0.94))
-            blade(from: tail, to: tip, width: 1.1,
-                  color: Palette.pearl.withAlphaComponent(fade * 0.98))
-            // Needle-thin echo follows, separated in space and time.
-            let normal = CGPoint(x: -uy * 4, y: ux * 4)
-            let echo = NSBezierPath()
-            echo.move(to: CGPoint(x: tail.x + normal.x, y: tail.y + normal.y))
-            echo.line(to: CGPoint(x: tip.x + normal.x, y: tip.y + normal.y))
-            echo.lineWidth = 0.7
-            Palette.silver.withAlphaComponent(fade * 0.58).setStroke()
-            echo.stroke()
+        for (i, start) in slashTimes.enumerated() {
+            let ageOfCut = age - start
+            let main = i.isMultiple(of: 2)
+            let life: TimeInterval = main ? 0.105 : 0.067
+            guard ageOfCut >= 0 && ageOfCut < life else { continue }
+            let travel: TimeInterval = main ? 0.055 : 0.033
+            let progress = CGFloat(min(1, ageOfCut / travel))
+            let fade = CGFloat(min(1, ageOfCut / 0.009)
+                               * max(0, 1 - ageOfCut / life))
+            let line = lines[lineIDs[i]]
+            let a = line.0, b = line.1
+            let tip = CGPoint(x: a.x + (b.x - a.x) * progress,
+                              y: a.y + (b.y - a.y) * progress)
+            let span = hypot(b.x - a.x, b.y - a.y)
+            let ux = (b.x - a.x) / max(1, span)
+            let uy = (b.y - a.y) / max(1, span)
+            let tailLength = min(main ? 128 : 78, span * 0.65)
+            let tail = CGPoint(x: tip.x - ux * tailLength,
+                               y: tip.y - uy * tailLength)
+            let weight: CGFloat = main ? 1 : 0.28
+            let shadowTail = CGPoint(x: tail.x - uy * 3.8, y: tail.y + ux * 3.8)
+            let shadowTip = CGPoint(x: tip.x - uy * 3.8, y: tip.y + ux * 3.8)
+            blade(from: shadowTail, to: shadowTip, width: main ? 7 : 3,
+                  color: Palette.ink.withAlphaComponent(fade * 0.50 * weight))
+            blade(from: tail, to: tip, width: main ? 17 : 8,
+                  color: Palette.ink.withAlphaComponent(fade * 0.80 * weight))
+            blade(from: tail, to: tip, width: main ? 5 : 2,
+                  color: Palette.silver.withAlphaComponent(fade * 0.95 * weight))
+            blade(from: tail, to: tip, width: main ? 1.5 : 0.7,
+                  color: Palette.pearl.withAlphaComponent(fade * weight))
         }
     }
 
     /// 70ms still frame, then one full-height white-hot execution slash.
     /// The decisive diagonal is bigger and lasts longer than the preceding cuts.
-    private static func drawFinalSlash(in rect: CGRect, age: TimeInterval) {
+    private static func drawFinalSlash(in rect: CGRect,
+                                       rootX: CGFloat, age: TimeInterval) {
         let t = age - finisherAt
-        guard t >= 0 && t < 0.24 else { return }
-        let a = CGPoint(x: rect.minX - 24, y: rect.maxY + 23)
-        let b = CGPoint(x: rect.maxX + 23, y: rect.minY - 12)
-        let progress = CGFloat(min(1, t / 0.075))
+        guard t >= 0 && t < 0.16 else { return }
+        // Finisher display and polygon fracture are the *same line*.
+        let line = executionLine(in: rect, rootX: rootX)
+        let a = line.start, b = line.end
+        let progress = CGFloat(min(1, t / 0.066))
         let tip = CGPoint(x: a.x + (b.x - a.x) * progress,
                           y: a.y + (b.y - a.y) * progress)
         let len = hypot(b.x - a.x, b.y - a.y)
         let ux = (b.x - a.x) / len, uy = (b.y - a.y) / len
         let tail = CGPoint(x: tip.x - ux * len * 0.70,
                            y: tip.y - uy * len * 0.70)
-        let fade = CGFloat(max(0, 1 - t / 0.24))
+        let fade = CGFloat(max(0, 1 - t / 0.16))
         // The execution stroke is monochrome even while the last patches of
         // color are draining out of the flower beneath it.
         blade(from: tail, to: tip, width: 33,
@@ -588,8 +641,8 @@ enum HarvestSlashEffect {
         echo.stroke()
         // The brightest moment is only a brief central crossing, not a
         // fullscreen flash or a solid rectangular overlay.
-        if t > 0.06 && t < 0.115 {
-            let impact = CGFloat(sin((t - 0.06) / 0.055 * .pi))
+        if t > 0.060 && t < 0.093 {
+            let impact = CGFloat(sin((t - 0.060) / 0.033 * .pi))
             let cross = NSBezierPath()
             cross.move(to: CGPoint(x: rect.minX - 10, y: rect.midY))
             cross.line(to: CGPoint(x: rect.maxX + 10, y: rect.midY))
@@ -603,11 +656,13 @@ enum HarvestSlashEffect {
         let lines = slashSegments(in: rect)
         for (index, start) in slashTimes.enumerated() {
             let elapsed = age - start
-            guard elapsed > 0.10 && elapsed < 0.43 else { continue }
-            let alpha = CGFloat((0.43 - elapsed) / 0.33) * 0.52
+            guard elapsed > 0.035 && elapsed < 0.29 else { continue }
+            let alpha = CGFloat((0.29 - elapsed) / 0.255)
+                * (index.isMultiple(of: 2) ? 0.56 : 0.14)
             let path = NSBezierPath()
-            path.move(to: lines[index].0)
-            path.line(to: lines[index].1)
+            let line = lines[[0, 1, 4, 3][index]]
+            path.move(to: line.0)
+            path.line(to: line.1)
             path.lineWidth = 1.3
             Palette.steel.withAlphaComponent(alpha * 0.82).setStroke()
             path.stroke()
@@ -615,10 +670,10 @@ enum HarvestSlashEffect {
     }
 
     private static func drawImpactFlash(at center: CGPoint, age: TimeInterval) {
-        let t = age - shatterAt
-        guard t >= 0 && t < 0.23 else { return }
-        let alpha = CGFloat(1 - t / 0.23)
-        let radius = CGFloat(13 + t * 165)
+        let t = age - secondaryAt
+        guard t >= 0 && t < 0.19 else { return }
+        let alpha = CGFloat(1 - t / 0.19)
+        let radius = CGFloat(9 + t * 155)
         for i in 0..<16 {
             let angle = CGFloat(i) * .pi / 8
             let start = CGPoint(x: center.x + cos(angle) * radius * 0.21,
@@ -640,7 +695,7 @@ enum HarvestSlashEffect {
     }
 
     private static func drawGroundSparks(centerX: CGFloat, age: TimeInterval) {
-        let time = age - shatterAt - 0.38
+        let time = age - secondaryAt - 0.25
         guard time > 0 && time < 0.63 else { return }
         let fade = CGFloat(1 - time / 0.63)
         let spread = CGFloat(16 + time * 180)
@@ -662,9 +717,9 @@ enum HarvestSlashEffect {
     }
     /// Small high-velocity diamond sparks accompany the first fracture.
     private static func drawBurstDust(in rect: CGRect, age: TimeInterval) {
-        let t = age - shatterAt
-        guard t >= 0 && t < 0.39 else { return }
-        let fade = CGFloat(max(0, 1 - t / 0.39))
+        let t = age - secondaryAt
+        guard t >= 0 && t < 0.30 else { return }
+        let fade = CGFloat(max(0, 1 - t / 0.30))
         for i in 0..<42 {
             let angle = CGFloat(i) * 2.399963
             let radius = CGFloat(9 + (i * 17) % 27)
