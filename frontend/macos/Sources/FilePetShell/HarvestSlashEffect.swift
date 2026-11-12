@@ -710,7 +710,7 @@ enum HarvestSlashEffect {
         let spread = CGFloat(16 + time * 180)
         // Two low ground skids feel like impact; a perfect ellipse looked
         // like a UI selection ring in the frame-by-frame review.
-        for sign: CGFloat in [-1, 1] {
+        for sign in [CGFloat(-1), CGFloat(1)] {
             let skid = NSBezierPath()
             skid.move(to: CGPoint(x: centerX + sign * 4, y: floorY + 1.5))
             skid.line(to: CGPoint(x: centerX + sign * spread / 2,
