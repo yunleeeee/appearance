@@ -14,9 +14,10 @@ enum HarvestGesturePolicy {
 /// one image. No live stem is redrawn after the decisive sword cut.
 @MainActor
 enum HarvestSlashEffect {
-    static let duration: TimeInterval = 1.62
+    static let duration: TimeInterval = 1.38
     static let reducedDuration: TimeInterval = 0.16
-    static let shatterAt: TimeInterval = 0.72
+    static let shatterAt: TimeInterval = 0.54
+    static let secondaryAt: TimeInterval = 0.73
     /// Inksteel: steel-blue sword reflections before the final strike,
     /// strictly achromatic charcoal and silver once the plant breaks.
     enum Palette {
@@ -34,7 +35,9 @@ enum HarvestSlashEffect {
     }
 
     static let floorY: CGFloat = 2
-    static let finisherAt: TimeInterval = 0.61
+    static let finisherAt: TimeInterval = 0.42
+    static let impactFrameAt: TimeInterval = 0.505
+    static let impactFrameDuration: TimeInterval = 0.034
 
     struct Sample: Equatable {
         let showHead: Bool
@@ -49,12 +52,14 @@ enum HarvestSlashEffect {
         let speedX: CGFloat
         let launch: CGFloat
         let rotation: CGFloat
+        let side: CGFloat
         let delay: CGFloat
     }
 
     struct PlantSnapshot {
         let image: NSImage
         let monochromeImage: NSImage
+        let invertedImage: NSImage
         /// Stored only for deterministic grayscale pixel tests.
         let monochromeRGBA: [UInt8]
         /// This is the whole plant's rectangle, not the bloom geometry.
@@ -73,8 +78,10 @@ enum HarvestSlashEffect {
                           shardOpacity: 0, finished: t >= reducedDuration)
         }
         let broken = t >= shatterAt
+        let debris = t >= secondaryAt
         return Sample(showHead: !broken, stemOpacity: broken ? 0 : 1,
-                      shardOpacity: broken ? max(0, min(1, CGFloat((duration - t) / 0.48))) : 0,
+                      shardOpacity: debris ? max(0, min(1,
+                          CGFloat((duration - t) / 0.42))) : 0,
                       finished: t >= duration)
     }
 
@@ -83,7 +90,7 @@ enum HarvestSlashEffect {
     /// every separated fragment are fully neutral black/white.
     static func monochromeProgress(at seconds: TimeInterval, reduceMotion: Bool) -> CGFloat {
         guard !reduceMotion else { return 0 }
-        return max(0, min(1, CGFloat((seconds - finisherAt) / 0.10)))
+        return max(0, min(1, CGFloat((seconds - finisherAt - 0.02) / 0.10)))
     }
 
     /// The cut area is explicitly rectangular and spans the complete native
@@ -98,7 +105,64 @@ enum HarvestSlashEffect {
                height: bounds.height - 3)
     }
 
-    /// Nine real diagonals and near-vertical cuts traverse *different heights*
+    /// The very same inclined blade line is used to split the plant bitmap.
+    /// It passes through the crown and remains close to the rooted stem.
+    static func executionLine(in rect: CGRect, rootX: CGFloat)
+        -> (start: CGPoint, end: CGPoint) {
+        (CGPoint(x: rootX - 17, y: rect.maxY + 10),
+         CGPoint(x: rootX + 11, y: rect.minY - 10))
+    }
+
+    private static func signedCut(_ point: CGPoint, start: CGPoint,
+                                   end: CGPoint) -> CGFloat {
+        (end.x - start.x) * (point.y - start.y)
+            - (end.y - start.y) * (point.x - start.x)
+    }
+
+    /// Clip an arbitrary polygon to the two half-planes of the execution
+    /// sword. This is genuine geometry, not an unrelated tile explosion.
+    static func splitBySword(_ polygon: [CGPoint], start: CGPoint, end: CGPoint)
+        -> (positive: [CGPoint], negative: [CGPoint]) {
+        func clip(positive: Bool) -> [CGPoint] {
+            guard !polygon.isEmpty else { return [] }
+            var result: [CGPoint] = []
+            for i in polygon.indices {
+                let a = polygon[i], b = polygon[(i + 1) % polygon.count]
+                let da = signedCut(a, start: start, end: end)
+                let db = signedCut(b, start: start, end: end)
+                let insideA = positive ? da >= -0.0001 : da <= 0.0001
+                let insideB = positive ? db >= -0.0001 : db <= 0.0001
+                if insideA { result.append(a) }
+                if insideA != insideB {
+                    let t = min(1, max(0, da / (da - db)))
+                    result.append(CGPoint(x: a.x + (b.x - a.x) * t,
+                                          y: a.y + (b.y - a.y) * t))
+                }
+            }
+            return result
+        }
+        return (clip(positive: true), clip(positive: false))
+    }
+
+    static func polygonArea(_ polygon: [CGPoint]) -> CGFloat {
+        guard polygon.count >= 3 else { return 0 }
+        var twiceArea: CGFloat = 0
+        for i in polygon.indices {
+            let a = polygon[i], b = polygon[(i + 1) % polygon.count]
+            twiceArea += a.x * b.y - b.x * a.y
+        }
+        return abs(twiceArea) * 0.5
+    }
+
+    /// A continuous easing curve separates the two primary pieces before
+    /// small fragments inherit their positions and disperse.
+    static func primarySeparation(at age: TimeInterval) -> CGFloat {
+        let t = max(0, min(1, CGFloat((age - shatterAt - 0.035)
+                                     / (secondaryAt - shatterAt - 0.035))))
+        return 13 * (1 - pow(1 - t, 3))
+    }
+
+    /// Seven sampled directions cover different heights before the execution cut.
     /// of the rectangle, including the basal stem and ground decoration.
     static func slashSegments(in rect: CGRect) -> [(CGPoint, CGPoint)] {
         let ends: [(CGFloat, CGFloat, CGFloat, CGFloat)] = [
@@ -164,30 +228,38 @@ enum HarvestSlashEffect {
         }
         guard let cgImage else { return nil }
         let image = NSImage(cgImage: cgImage, size: bounds.size)
+        func imageFromPixels(_ bytes: [UInt8]) -> NSImage? {
+            guard let provider = CGDataProvider(data: Data(bytes) as CFData),
+                  let cg = CGImage(
+                    width: width, height: height,
+                    bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: rowBytes,
+                    space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGBitmapInfo(rawValue:
+                        CGImageAlphaInfo.premultipliedLast.rawValue
+                        | CGBitmapInfo.byteOrder32Big.rawValue),
+                    provider: provider, decode: nil,
+                    shouldInterpolate: false, intent: .defaultIntent
+                  ) else { return nil }
+            return NSImage(cgImage: cg, size: bounds.size)
+        }
         let monochromeRGBA = makeMonochromeRGBA(rgba)
-        guard let provider = CGDataProvider(data: Data(monochromeRGBA) as CFData),
-              let monochromeCG = CGImage(
-                width: width, height: height,
-                bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: rowBytes,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue
-                    | CGBitmapInfo.byteOrder32Big.rawValue),
-                provider: provider, decode: nil,
-                shouldInterpolate: false, intent: .defaultIntent
-              ) else { return nil }
-        let monochrome = NSImage(cgImage: monochromeCG, size: bounds.size)
+        guard let monochrome = imageFromPixels(monochromeRGBA),
+              let inverted = imageFromPixels(makeMonochromeRGBA(rgba, inverted: true))
+        else { return nil }
         let alpha = stride(from: 3, to: rgba.count, by: 4).map { rgba[$0] }
         let rect = cuttingRect(in: CGRect(origin: .zero, size: bounds.size))
-        let fragments = makeFragments(rect: rect, width: width, height: height, alpha: alpha)
+        let line = executionLine(in: rect, rootX: artwork.stemX)
+        let fragments = makeFragments(rect: rect, width: width, height: height,
+                                      alpha: alpha, cutStart: line.start, cutEnd: line.end)
         return PlantSnapshot(image: image, monochromeImage: monochrome,
-                             monochromeRGBA: monochromeRGBA,
+                             invertedImage: inverted, monochromeRGBA: monochromeRGBA,
                              cutRect: rect, fragments: fragments,
                              pixelWidth: width, pixelHeight: height, alpha: alpha)
     }
 
     /// Contrast-preserving grayscale on RGBA premultiplied pixels. Alpha is
     /// copied exactly: the original pixel-sharp foliage and edge masks survive.
-    static func makeMonochromeRGBA(_ rgba: [UInt8]) -> [UInt8] {
+    static func makeMonochromeRGBA(_ rgba: [UInt8], inverted: Bool = false) -> [UInt8] {
         var output = rgba
         guard rgba.count.isMultiple(of: 4) else { return output }
         for i in stride(from: 0, to: rgba.count, by: 4) {
@@ -206,7 +278,8 @@ enum HarvestSlashEffect {
             let luminance = Double(r) * 0.2126 + Double(g) * 0.7152
                 + Double(b) * 0.0722
             let gray = max(0, min(255, Int((luminance - 118) * 1.18 + 118)))
-            let premultiplied = UInt8((gray * a + 127) / 255)
+            let value = inverted ? 255 - gray : gray
+            let premultiplied = UInt8((value * a + 127) / 255)
             output[i] = premultiplied
             output[i + 1] = premultiplied
             output[i + 2] = premultiplied
@@ -217,7 +290,8 @@ enum HarvestSlashEffect {
     /// Screen-independent 10x17 triangular segmentation. Transparent tiles are
     /// removed by testing actual raster pixels, including narrow root/stem lines.
     private static func makeFragments(rect: CGRect, width: Int, height: Int,
-                                      alpha: [UInt8]) -> [Fragment] {
+                                      alpha: [UInt8],
+                                      cutStart: CGPoint, cutEnd: CGPoint) -> [Fragment] {
         let columns = 10, rows = 17
         var result: [Fragment] = []
         for row in 0..<rows {
@@ -237,24 +311,32 @@ enum HarvestSlashEffect {
                 let triangles = (row + col).isMultiple(of: 2)
                     ? [[a, b, c], [a, c, d]] : [[a, b, d], [b, c, d]]
                 for (half, triangle) in triangles.enumerated() {
-                    guard containsPaint(triangle, rect: rect,
-                                        pixelWidth: width, pixelHeight: height,
-                                        alpha: alpha) else { continue }
-                    let i = (row * columns + col) * 2 + half
-                    let center = CGPoint(
-                        x: triangle.map(\.x).reduce(0, +) / 3,
-                        y: triangle.map(\.y).reduce(0, +) / 3)
-                    // Every shard has an independent direction and lift; alternating
-                    // columns had looked like two synchronized falling strips.
-                    let side: CGFloat = (i * 37 % 11) < 5 ? -1 : 1
-                    let offset = CGFloat((i * 43) % 61 - 30)
-                    let spread = CGFloat(20 + (i * 19) % 73)
-                    let stem = row < rows * 2 / 3
-                    result.append(Fragment(points: triangle, center: center,
-                        speedX: side * (spread + 64) + offset * 0.95,
-                        launch: CGFloat((stem ? 25 : 58) + (i * 29) % 87),
-                        rotation: side * CGFloat(1.7 + Double(i % 9) * 0.37),
-                        delay: CGFloat(i % 7) * 0.006))
+                    let halves = splitBySword(triangle, start: cutStart, end: cutEnd)
+                    let candidates: [([CGPoint], CGFloat)] = [
+                        (halves.positive, 1), (halves.negative, -1)
+                    ]
+                    for (part, candidate) in candidates.enumerated() {
+                        let points = candidate.0
+                        guard points.count >= 3, polygonArea(points) > 0.03,
+                              containsPaint(points, rect: rect,
+                                            pixelWidth: width, pixelHeight: height,
+                                            alpha: alpha) else { continue }
+                        let i = ((row * columns + col) * 2 + half) * 2 + part
+                        let center = CGPoint(
+                            x: points.map(\\.x).reduce(0, +) / CGFloat(points.count),
+                            y: points.map(\\.y).reduce(0, +) / CGFloat(points.count))
+                        let side = candidate.1
+                        let jitter = CGFloat((i * 41) % 47 - 23)
+                        let lift = CGFloat((i * 29) % 61)
+                        // Side bias follows the actual cutting plane. These
+                        // lighter petals lift more than the grounded stem.
+                        let isCrown = row > rows * 2 / 3
+                        result.append(Fragment(points: points, center: center,
+                            speedX: side * CGFloat(42 + (i * 19) % 52) + jitter,
+                            launch: CGFloat(isCrown ? 74 : 27) + lift,
+                            rotation: side * CGFloat(1.1 + Double(i % 7) * 0.38),
+                            side: side, delay: CGFloat(i % 6) * 0.008))
+                    }
                 }
             }
         }
@@ -278,8 +360,8 @@ enum HarvestSlashEffect {
                 guard alpha[y * pixelWidth + x] > 20 else { continue }
                 let p = CGPoint(x: rect.minX + (CGFloat(x) + 0.5) / CGFloat(pixelWidth) * rect.width,
                                 y: rect.maxY - (CGFloat(y) + 0.5) / CGFloat(pixelHeight) * rect.height)
-                let edges = [0, 1, 2].map { i -> CGFloat in
-                    let a = triangle[i], b = triangle[(i + 1) % 3]
+                let edges = triangle.indices.map { i -> CGFloat in
+                    let a = triangle[i], b = triangle[(i + 1) % triangle.count]
                     return (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)
                 }
                 if !edges.contains(where: { $0 < -0.001 }) ||
