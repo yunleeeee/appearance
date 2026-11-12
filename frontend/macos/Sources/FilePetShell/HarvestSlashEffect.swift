@@ -678,27 +678,29 @@ enum HarvestSlashEffect {
 
     private static func drawImpactFlash(at center: CGPoint, age: TimeInterval) {
         let t = age - secondaryAt
-        guard t >= 0 && t < 0.19 else { return }
-        let alpha = CGFloat(1 - t / 0.19)
-        let radius = CGFloat(9 + t * 155)
-        for i in 0..<16 {
-            let angle = CGFloat(i) * .pi / 8
-            let start = CGPoint(x: center.x + cos(angle) * radius * 0.21,
-                                y: center.y + sin(angle) * radius * 0.21)
-            let end = CGPoint(x: center.x + cos(angle) * radius,
-                              y: center.y + sin(angle) * radius)
-            let beam = NSBezierPath()
-            beam.move(to: start)
-            beam.line(to: end)
-            beam.lineWidth = i.isMultiple(of: 4) ? 3 : 1.4
-            (i.isMultiple(of: 8) ? Palette.charcoal : Palette.ash)
-                .withAlphaComponent(alpha * (i.isMultiple(of: 8) ? 0.86 : 0.71)).setStroke()
-            beam.stroke()
+        guard t >= 0 && t < 0.18 else { return }
+        let fade = CGFloat(1 - t / 0.18)
+        let length = CGFloat(7 + t * 153)
+        // Irregular, asymmetric ink splinters; the old sixteen equal rays
+        // formed an obvious "loading spinner" in the recorded proof.
+        for i in 0..<13 {
+            let angle = CGFloat(i) * 2.399963 + 0.14
+            let radius = length * CGFloat(0.52 + Double((i * 11) % 9) * 0.072)
+            let start = CGPoint(
+                x: center.x + cos(angle) * radius * 0.16,
+                y: center.y + sin(angle) * radius * 0.16)
+            let end = CGPoint(
+                x: center.x + cos(angle) * radius,
+                y: center.y + sin(angle) * radius)
+            let mark = NSBezierPath()
+            mark.move(to: start)
+            mark.line(to: end)
+            mark.lineWidth = i.isMultiple(of: 5) ? 2.1 : 0.9
+            (i.isMultiple(of: 4) ? Palette.charcoal : Palette.ash)
+                .withAlphaComponent(fade * (i.isMultiple(of: 4) ? 0.80 : 0.63))
+                .setStroke()
+            mark.stroke()
         }
-        Palette.ash.withAlphaComponent(alpha * 0.35).setFill()
-        NSBezierPath(ovalIn: CGRect(x: center.x - radius * 0.3,
-                                   y: center.y - radius * 0.3,
-                                   width: radius * 0.6, height: radius * 0.6)).fill()
     }
 
     private static func drawGroundSparks(centerX: CGFloat, age: TimeInterval) {
@@ -706,11 +708,17 @@ enum HarvestSlashEffect {
         guard time > 0 && time < 0.63 else { return }
         let fade = CGFloat(1 - time / 0.63)
         let spread = CGFloat(16 + time * 180)
-        let ring = NSBezierPath(ovalIn: CGRect(x: centerX - spread / 2,
-            y: floorY, width: spread, height: 5 + CGFloat(time * 3)))
-        ring.lineWidth = 1.8
-        Palette.charcoal.withAlphaComponent(fade * 0.58).setStroke()
-        ring.stroke()
+        // Two low ground skids feel like impact; a perfect ellipse looked
+        // like a UI selection ring in the frame-by-frame review.
+        for sign: CGFloat in [-1, 1] {
+            let skid = NSBezierPath()
+            skid.move(to: CGPoint(x: centerX + sign * 4, y: floorY + 1.5))
+            skid.line(to: CGPoint(x: centerX + sign * spread / 2,
+                                  y: floorY + 1.5 + CGFloat(time) * 2))
+            skid.lineWidth = 1.25
+            Palette.charcoal.withAlphaComponent(fade * 0.56).setStroke()
+            skid.stroke()
+        }
         for i in 0..<23 {
             let sign: CGFloat = i.isMultiple(of: 2) ? -1 : 1
             let x = centerX + sign * CGFloat(time) * CGFloat(40 + i * 6)
