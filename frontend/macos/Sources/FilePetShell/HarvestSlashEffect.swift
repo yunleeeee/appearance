@@ -417,9 +417,10 @@ enum HarvestSlashEffect {
         } else {
             drawFragments(snapshot, rootX: artwork.stemX, age: age,
                           opacity: state.shardOpacity, context: ctx)
+            // Only the actual clipped plant fragments and low ground skids
+            // remain after the secondary cut. Center-origin raybursts read as
+            // fireworks and have no physical relationship to the blade.
             drawGroundSparks(centerX: artwork.stemX, age: age)
-            drawImpactFlash(at: CGPoint(x: artwork.stemX, y: battlefield.midY), age: age)
-            drawBurstDust(in: battlefield, age: age)
         }
         drawSwordStreaks(in: battlefield, age: age)
         // Draw the finishing blade in the same native coordinate system
@@ -676,33 +677,6 @@ enum HarvestSlashEffect {
         }
     }
 
-    private static func drawImpactFlash(at center: CGPoint, age: TimeInterval) {
-        let t = age - secondaryAt
-        guard t >= 0 && t < 0.18 else { return }
-        let fade = CGFloat(1 - t / 0.18)
-        let length = CGFloat(7 + t * 153)
-        // Irregular, asymmetric ink splinters; the old sixteen equal rays
-        // formed an obvious "loading spinner" in the recorded proof.
-        for i in 0..<13 {
-            let angle = CGFloat(i) * 2.399963 + 0.14
-            let radius = length * CGFloat(0.52 + Double((i * 11) % 9) * 0.072)
-            let start = CGPoint(
-                x: center.x + cos(angle) * radius * 0.16,
-                y: center.y + sin(angle) * radius * 0.16)
-            let end = CGPoint(
-                x: center.x + cos(angle) * radius,
-                y: center.y + sin(angle) * radius)
-            let mark = NSBezierPath()
-            mark.move(to: start)
-            mark.line(to: end)
-            mark.lineWidth = i.isMultiple(of: 5) ? 2.1 : 0.9
-            (i.isMultiple(of: 4) ? Palette.charcoal : Palette.ash)
-                .withAlphaComponent(fade * (i.isMultiple(of: 4) ? 0.80 : 0.63))
-                .setStroke()
-            mark.stroke()
-        }
-    }
-
     private static func drawGroundSparks(centerX: CGFloat, age: TimeInterval) {
         let time = age - secondaryAt - 0.25
         guard time > 0 && time < 0.63 else { return }
@@ -719,39 +693,15 @@ enum HarvestSlashEffect {
             Palette.charcoal.withAlphaComponent(fade * 0.56).setStroke()
             skid.stroke()
         }
-        for i in 0..<23 {
+        for i in 0..<10 {
             let sign: CGFloat = i.isMultiple(of: 2) ? -1 : 1
             let x = centerX + sign * CGFloat(time) * CGFloat(40 + i * 6)
             let y = floorY + abs(sin(CGFloat(i) * 2.15))
-                * CGFloat(5 + (1 - time / 0.63) * 20)
+                * CGFloat(3 + (1 - time / 0.63) * 9)
             (i.isMultiple(of: 9) ? Palette.charcoal : Palette.ash)
                 .withAlphaComponent(fade * 0.78).setFill()
-            let size: CGFloat = i.isMultiple(of: 5) ? 3.3 : 1.6
+            let size: CGFloat = i.isMultiple(of: 5) ? 2.3 : 1.2
             NSBezierPath(ovalIn: CGRect(x: x, y: y, width: size, height: size)).fill()
-        }
-    }
-    /// Small high-velocity diamond sparks accompany the first fracture.
-    private static func drawBurstDust(in rect: CGRect, age: TimeInterval) {
-        let t = age - secondaryAt
-        guard t >= 0 && t < 0.30 else { return }
-        let fade = CGFloat(max(0, 1 - t / 0.30))
-        for i in 0..<42 {
-            let angle = CGFloat(i) * 2.399963
-            let radius = CGFloat(9 + (i * 17) % 27)
-                + CGFloat(t) * CGFloat(98 + (i * 13) % 190)
-            let x = rect.midX + cos(angle) * radius * 0.72
-            let y = rect.midY + sin(angle) * radius * 0.86
-            let size: CGFloat = i.isMultiple(of: 5) ? 2.9 : 1.5
-            let spark = NSBezierPath()
-            spark.move(to: CGPoint(x: x, y: y + size * 0.5))
-            spark.line(to: CGPoint(x: x + size * 1.2, y: y))
-            spark.line(to: CGPoint(x: x, y: y - size * 0.5))
-            spark.close()
-            (i.isMultiple(of: 9)
-                ? Palette.charcoal.withAlphaComponent(fade * 0.82)
-                : Palette.ash.withAlphaComponent(fade * 0.77)
-            ).setFill()
-            spark.fill()
         }
     }
 
