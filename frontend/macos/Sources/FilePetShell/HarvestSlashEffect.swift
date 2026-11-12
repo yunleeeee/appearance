@@ -645,11 +645,16 @@ enum HarvestSlashEffect {
         // fullscreen flash or a solid rectangular overlay.
         if t > 0.060 && t < 0.093 {
             let impact = CGFloat(sin((t - 0.060) / 0.033 * .pi))
+            // Restrained perpendicular spark at the exact blade crossing,
+            // not an unrelated full-width horizontal scan line.
+            let center = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
             let cross = NSBezierPath()
-            cross.move(to: CGPoint(x: rect.minX - 10, y: rect.midY))
-            cross.line(to: CGPoint(x: rect.maxX + 10, y: rect.midY))
-            cross.lineWidth = 1.5
-            Palette.charcoal.withAlphaComponent(impact * 0.85).setStroke()
+            cross.move(to: CGPoint(x: center.x - uy * 15,
+                                    y: center.y + ux * 15))
+            cross.line(to: CGPoint(x: center.x + uy * 15,
+                                    y: center.y - ux * 15))
+            cross.lineWidth = 1.4
+            Palette.charcoal.withAlphaComponent(impact * 0.82).setStroke()
             cross.stroke()
         }
     }
